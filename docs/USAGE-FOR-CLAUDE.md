@@ -4,19 +4,19 @@
 
 ## Qué es
 
-`@misael703/bsale-sdk` es un SDK de TypeScript para la API REST de Bsale (facturación electrónica chilena). Paquete npm alojado en GitHub Packages bajo el scope `@misael703`. Zero dependencies — usa fetch nativo de Node 20+.
+`@misael703/bsale-sdk` es un SDK de TypeScript para la API REST de Bsale (sistema de facturación electrónica). Compatible con Chile, Perú y México. Disponible en npmjs y GitHub Packages bajo el scope `@misael703`. Zero dependencies — usa fetch nativo de Node 20+.
 
 ## Instalación
 
-Requiere `.npmrc` en la raíz del proyecto consumidor:
+```bash
+pnpm add @misael703/bsale-sdk
+```
+
+Si se usa desde GitHub Packages (en vez de npmjs), agregar `.npmrc` en la raíz del proyecto consumidor:
 
 ```
 @misael703:registry=https://npm.pkg.github.com
 //npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
-```
-
-```bash
-pnpm add @misael703/bsale-sdk
 ```
 
 ## Inicialización
@@ -26,7 +26,7 @@ import { BsaleClient } from '@misael703/bsale-sdk';
 
 const bsale = new BsaleClient({
   accessToken: process.env.BSALE_ACCESS_TOKEN!, // requerido
-  // baseUrl: 'https://api.bsale.io/v1',        // default
+  // baseUrl: 'https://api.bsale.io/v1',        // Chile (default). Perú: api.bsale.com.pe, México: api.bsale.com.mx
   // timeout: 15000,                              // ms, default
   // maxRetries: 3,                               // default
   // cacheTtlMs: 60000,                           // ms, default

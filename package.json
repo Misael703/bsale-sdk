@@ -1,7 +1,7 @@
 {
   "name": "@misael703/bsale-sdk",
   "version": "0.1.0",
-  "description": "SDK en TypeScript para la API REST de Bsale",
+  "description": "TypeScript SDK for the Bsale REST API. Supports Chile, Peru, and Mexico.",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -34,7 +34,7 @@
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
   },
-  "license": "UNLICENSED",
+  "license": "MIT",
   "engines": {
     "node": ">=20"
   },

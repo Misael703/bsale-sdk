@@ -1,6 +1,6 @@
 # @misael703/bsale-sdk
 
-SDK en TypeScript para la API REST de [Bsale](https://api.bsale.io/v1). Zero dependencies — solo usa `fetch` nativo de Node 20+.
+SDK en TypeScript para la API REST de [Bsale](https://www.bsale.com). Compatible con Chile, Per&uacute; y M&eacute;xico. Zero dependencies — solo usa `fetch` nativo de Node 20+.
 
 ## Instalaci&oacute;n
 
@@ -264,6 +264,30 @@ const bsale = new BsaleClient({
 });
 ```
 
+### Multi-pa&iacute;s
+
+El SDK es compatible con todas las instancias regionales de Bsale. Cambia la `baseUrl` seg&uacute;n el pa&iacute;s:
+
+| Pa&iacute;s | Base URL |
+|-------|----------|
+| Chile (default) | `https://api.bsale.io/v1` |
+| Per&uacute; | `https://api.bsale.com.pe/v1` |
+| M&eacute;xico | `https://api.bsale.com.mx/v1` |
+
+```typescript
+// Ejemplo: Per&uacute;
+const bsalePeru = new BsaleClient({
+  accessToken: 'tu-token-peru',
+  baseUrl: 'https://api.bsale.com.pe/v1',
+});
+
+// Ejemplo: M&eacute;xico
+const bsaleMexico = new BsaleClient({
+  accessToken: 'tu-token-mexico',
+  baseUrl: 'https://api.bsale.com.mx/v1',
+});
+```
+
 ## Cache
 
 El SDK incluye un cache en memoria para requests GET:
@@ -357,4 +381,4 @@ pnpm format         # Formatear c&oacute;digo
 
 ## Licencia
 
-UNLICENSED
+MIT

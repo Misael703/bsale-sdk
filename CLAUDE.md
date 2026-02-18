@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-SDK en TypeScript para la API REST de Bsale (https://api.bsale.io/v1). Paquete npm publicado en GitHub Packages bajo el scope `@misael703`.
+SDK en TypeScript para la API REST de Bsale. Compatible con Chile (`api.bsale.io`), Per&uacute; (`api.bsale.com.pe`) y M&eacute;xico (`api.bsale.com.mx`). Publicado en GitHub Packages y npmjs bajo el scope `@misael703`.
 
 ## Tech Stack
 
@@ -86,7 +86,7 @@ bsale-sdk/
 
 ## Bsale API Reference
 
-- **Base URL**: `https://api.bsale.io/v1`
+- **Base URL (default)**: `https://api.bsale.io/v1` (Chile). Tambi&eacute;n: `api.bsale.com.pe` (Per&uacute;), `api.bsale.com.mx` (M&eacute;xico)
 - **Auth**: Header `access_token: <token>` (NO Bearer, NO Authorization)
 - **Formato**: JSON. Endpoints terminan en `.json`
 - **Paginación**: `limit` (max 50), `offset`. Response incluye `count`, `items[]`, `next`
