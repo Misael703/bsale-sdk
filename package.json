@@ -1,5 +1,5 @@
 {
-  "name": "@misapuntescl/bsale-sdk",
+  "name": "@misael703/bsale-sdk",
   "version": "0.1.0",
   "description": "SDK en TypeScript para la API REST de Bsale",
   "type": "module",
@@ -35,7 +35,6 @@
     "registry": "https://npm.pkg.github.com"
   },
   "license": "UNLICENSED",
-  "private": true,
   "engines": {
     "node": ">=20"
   },

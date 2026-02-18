@@ -1,8 +1,8 @@
-# CLAUDE.md — @misapuntescl/bsale-sdk
+# CLAUDE.md — @misael703/bsale-sdk
 
 ## Project Overview
 
-SDK en TypeScript para la API REST de Bsale (https://api.bsale.io/v1). Paquete npm publicado en GitHub Packages bajo el scope `@misapuntescl`.
+SDK en TypeScript para la API REST de Bsale (https://api.bsale.io/v1). Paquete npm publicado en GitHub Packages bajo el scope `@misael703`.
 
 ## Tech Stack
 

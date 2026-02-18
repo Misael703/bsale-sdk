@@ -1,28 +1,28 @@
-# @misapuntescl/bsale-sdk — Guía de uso para Claude
+# @misael703/bsale-sdk — Guía de uso para Claude
 
 > Copia este contenido al CLAUDE.md de cualquier proyecto que consuma el SDK, o inclúyelo como contexto.
 
 ## Qué es
 
-`@misapuntescl/bsale-sdk` es un SDK de TypeScript para la API REST de Bsale (facturación electrónica chilena). Paquete npm alojado en GitHub Packages bajo el scope `@misapuntescl`. Zero dependencies — usa fetch nativo de Node 20+.
+`@misael703/bsale-sdk` es un SDK de TypeScript para la API REST de Bsale (facturación electrónica chilena). Paquete npm alojado en GitHub Packages bajo el scope `@misael703`. Zero dependencies — usa fetch nativo de Node 20+.
 
 ## Instalación
 
 Requiere `.npmrc` en la raíz del proyecto consumidor:
 
 ```
-@misapuntescl:registry=https://npm.pkg.github.com
+@misael703:registry=https://npm.pkg.github.com
 //npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
 ```
 
 ```bash
-pnpm add @misapuntescl/bsale-sdk
+pnpm add @misael703/bsale-sdk
 ```
 
 ## Inicialización
 
 ```typescript
-import { BsaleClient } from '@misapuntescl/bsale-sdk';
+import { BsaleClient } from '@misael703/bsale-sdk';
 
 const bsale = new BsaleClient({
   accessToken: process.env.BSALE_ACCESS_TOKEN!, // requerido
@@ -136,7 +136,7 @@ await bsale.documents.getSummary(params?)              // GET /documents/summary
 Ejemplo de creación de documento:
 
 ```typescript
-import { BsaleDocumentCreatePayload } from '@misapuntescl/bsale-sdk';
+import { BsaleDocumentCreatePayload } from '@misael703/bsale-sdk';
 
 const payload: BsaleDocumentCreatePayload = {
   documentTypeId: 1,      // tipo de documento (ej: 1 = boleta)
@@ -236,7 +236,7 @@ await bsale.stockReceptions.create(data)               // POST /stocks/reception
 Ejemplo de recepción de stock:
 
 ```typescript
-import { BsaleStockReceptionPayload } from '@misapuntescl/bsale-sdk';
+import { BsaleStockReceptionPayload } from '@misael703/bsale-sdk';
 
 const reception: BsaleStockReceptionPayload = {
   officeId: 1,
@@ -262,7 +262,7 @@ await bsale.stockConsumptions.create(data)             // POST /stocks/consumpti
 Ejemplo de consumo de stock:
 
 ```typescript
-import { BsaleStockConsumptionPayload } from '@misapuntescl/bsale-sdk';
+import { BsaleStockConsumptionPayload } from '@misael703/bsale-sdk';
 
 const consumption: BsaleStockConsumptionPayload = {
   officeId: 1,
@@ -338,7 +338,7 @@ import {
   fromBsaleTimestamp,  // Unix seconds → Date
   formatBsaleDate,     // Unix seconds → string legible (default: es-CL)
   todayBsaleTimestamp, // Hoy 00:00 como Unix seconds
-} from '@misapuntescl/bsale-sdk';
+} from '@misael703/bsale-sdk';
 
 // Ejemplos
 toBsaleTimestamp(new Date('2024-01-15'))  // → 1705276800
@@ -351,7 +351,7 @@ todayBsaleTimestamp()                    // → Unix seconds de hoy a las 00:00
 ## Manejo de errores
 
 ```typescript
-import { BsaleApiError } from '@misapuntescl/bsale-sdk';
+import { BsaleApiError } from '@misael703/bsale-sdk';
 
 try {
   await bsale.products.getById(999999);
@@ -391,7 +391,7 @@ bsale.clearResourceCache('products');  // solo products
 Si recibes webhooks de Bsale, pasa el payload al cliente para invalidar el cache:
 
 ```typescript
-import { BsaleWebhookPayload } from '@misapuntescl/bsale-sdk';
+import { BsaleWebhookPayload } from '@misael703/bsale-sdk';
 
 // El payload de Bsale tiene esta estructura:
 // { cpnId, resource, resourceId, topic, action, send, officeId? }
@@ -470,7 +470,7 @@ import type {
 
   // Webhook
   BsaleWebhookPayload,
-} from '@misapuntescl/bsale-sdk';
+} from '@misael703/bsale-sdk';
 ```
 
 ## Gotchas importantes
@@ -486,7 +486,7 @@ import type {
 
 ```typescript
 // lib/bsale.ts — singleton del cliente
-import { BsaleClient } from '@misapuntescl/bsale-sdk';
+import { BsaleClient } from '@misael703/bsale-sdk';
 
 export const bsale = new BsaleClient({
   accessToken: process.env.BSALE_ACCESS_TOKEN!,

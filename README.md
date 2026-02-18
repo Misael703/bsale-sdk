@@ -1,4 +1,4 @@
-# @misapuntescl/bsale-sdk
+# @misael703/bsale-sdk
 
 SDK en TypeScript para la API REST de [Bsale](https://api.bsale.io/v1). Zero dependencies — solo usa `fetch` nativo de Node 20+.
 
@@ -7,20 +7,20 @@ SDK en TypeScript para la API REST de [Bsale](https://api.bsale.io/v1). Zero dep
 Configura el registry de GitHub Packages en tu `.npmrc`:
 
 ```
-@misapuntescl:registry=https://npm.pkg.github.com
+@misael703:registry=https://npm.pkg.github.com
 //npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
 ```
 
 Luego instala el paquete:
 
 ```bash
-pnpm add @misapuntescl/bsale-sdk
+pnpm add @misael703/bsale-sdk
 ```
 
 ## Quick Start
 
 ```typescript
-import { BsaleClient } from '@misapuntescl/bsale-sdk';
+import { BsaleClient } from '@misael703/bsale-sdk';
 
 const bsale = new BsaleClient({
   accessToken: 'tu-access-token',
@@ -241,7 +241,7 @@ const st = await bsale.shippingTypes.getById(1);
 ## Configuraci&oacute;n
 
 ```typescript
-import { BsaleClient } from '@misapuntescl/bsale-sdk';
+import { BsaleClient } from '@misael703/bsale-sdk';
 
 const bsale = new BsaleClient({
   // Requerido: token de acceso a la API de Bsale
@@ -285,7 +285,7 @@ bsale.clearResourceCache('products');
 El m&eacute;todo `handleWebhook` invalida autom&aacute;ticamente el cache cuando Bsale notifica cambios:
 
 ```typescript
-import { BsaleClient, BsaleWebhookPayload } from '@misapuntescl/bsale-sdk';
+import { BsaleClient, BsaleWebhookPayload } from '@misael703/bsale-sdk';
 
 const bsale = new BsaleClient({ accessToken: '...' });
 
@@ -328,7 +328,7 @@ export class FooResource extends BaseResource<BsaleFoo> {
 Bsale usa Unix timestamps en **segundos** (no milisegundos):
 
 ```typescript
-import { toBsaleTimestamp, fromBsaleTimestamp, formatBsaleDate, todayBsaleTimestamp } from '@misapuntescl/bsale-sdk';
+import { toBsaleTimestamp, fromBsaleTimestamp, formatBsaleDate, todayBsaleTimestamp } from '@misael703/bsale-sdk';
 
 // Date &rarr; Unix seconds
 const ts = toBsaleTimestamp(new Date());
