@@ -9,7 +9,7 @@
 ## Instalación
 
 ```bash
-pnpm add @misael703/bsale-sdk
+npm add @misael703/bsale-sdk
 ```
 
 Si se usa desde GitHub Packages (en vez de npmjs), agregar `.npmrc` en la raíz del proyecto consumidor:
