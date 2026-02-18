@@ -4,15 +4,6 @@ SDK en TypeScript para la API REST de [Bsale](https://www.bsale.com). Compatible
 
 ## Instalaci&oacute;n
 
-Configura el registry de GitHub Packages en tu `.npmrc`:
-
-```
-@misael703:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
-```
-
-Luego instala el paquete:
-
 ```bash
 pnpm add @misael703/bsale-sdk
 ```
