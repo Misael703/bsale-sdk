@@ -1,0 +1,17 @@
+export { ProductsResource } from './products.resource';
+export { VariantsResource } from './variants.resource';
+export { DocumentsResource } from './documents.resource';
+export { ClientsResource } from './clients.resource';
+export { PriceListsResource } from './price-lists.resource';
+export { StocksResource } from './stocks.resource';
+export { DocumentTypesResource } from './document-types.resource';
+export { OfficesResource } from './offices.resource';
+export { ShippingsResource } from './shippings.resource';
+export { PaymentTypesResource } from './payment-types.resource';
+export { StockReceptionsResource } from './stock-receptions.resource';
+export { StockConsumptionsResource } from './stock-consumptions.resource';
+export { ReturnsResource } from './returns.resource';
+export { ThirdPartyDocumentsResource } from './third-party-documents.resource';
+export { ProductTypesResource } from './product-types.resource';
+export { UsersResource } from './users.resource';
+export { ShippingTypesResource } from './shipping-types.resource';
