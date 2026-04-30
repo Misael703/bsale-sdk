@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-SDK en TypeScript para la API REST de Bsale (Chile). Publicado en GitHub Packages y npmjs bajo el scope `@misael703`.
+SDK en TypeScript para la API REST de Bsale (Chile). Publicado en [npmjs](https://www.npmjs.com/package/@misael703/bsale-sdk) bajo el scope `@misael703`. C&oacute;digo fuente en GitHub: `Misael703/bsale-sdk`.
 
 > **Scope**: solo Chile (`api.bsale.io`). Per&uacute; y M&eacute;xico fueron descartados en 2026-04-29.
 
@@ -12,7 +12,7 @@ SDK en TypeScript para la API REST de Bsale (Chile). Publicado en GitHub Package
 - **Language**: TypeScript 5.x (strict mode)
 - **Build**: tsup (genera CJS + ESM + .d.ts)
 - **Package Manager**: pnpm
-- **Registry**: GitHub Packages (`npm.pkg.github.com`)
+- **Registry**: npmjs (`registry.npmjs.org`) — publicaci&oacute;n con `pnpm publish`
 - **Testing**: vitest
 - **Linting**: eslint + prettier
 
