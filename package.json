@@ -1,7 +1,7 @@
 {
   "name": "@misael703/bsale-sdk",
-  "version": "0.1.0",
-  "description": "TypeScript SDK for the Bsale REST API. Supports Chile, Peru, and Mexico.",
+  "version": "0.2.0",
+  "description": "TypeScript SDK for the Bsale REST API (Chile). 35 resources, 5 hosts, zero runtime dependencies.",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
