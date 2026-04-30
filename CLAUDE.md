@@ -2,7 +2,9 @@
 
 ## Project Overview
 
-SDK en TypeScript para la API REST de Bsale. Compatible con Chile (`api.bsale.io`), Per&uacute; (`api.bsale.com.pe`) y M&eacute;xico (`api.bsale.com.mx`). Publicado en GitHub Packages y npmjs bajo el scope `@misael703`.
+SDK en TypeScript para la API REST de Bsale (Chile). Publicado en GitHub Packages y npmjs bajo el scope `@misael703`.
+
+> **Scope**: solo Chile (`api.bsale.io`). Per&uacute; y M&eacute;xico fueron descartados en 2026-04-29.
 
 ## Tech Stack
 
@@ -86,7 +88,13 @@ bsale-sdk/
 
 ## Bsale API Reference
 
-- **Base URL (default)**: `https://api.bsale.io/v1` (Chile). Tambi&eacute;n: `api.bsale.com.pe` (Per&uacute;), `api.bsale.com.mx` (M&eacute;xico)
+- **Hosts** (5 distintos):
+  - `https://api.bsale.io/v1` — API principal (default)
+  - `https://bsp-api.bsale.io/v1` — claims de DTE de terceros
+  - `https://credential.bsale.io/v1` — metadata de instancia (auth en path)
+  - `https://courier.bsale.io/v1` — integraci&oacute;n con couriers
+  - `https://bcash.bsale.io/v1` — pasarela de pagos (lado MPE)
+- **Versiones**: `v1` (default), `v2` (packs, descuentos, market_info, checkout), `v3` (algunos sub-recursos de market_info)
 - **Auth**: Header `access_token: <token>` (NO Bearer, NO Authorization)
 - **Formato**: JSON. Endpoints terminan en `.json`
 - **Paginación**: `limit` (max 50), `offset`. Response incluye `count`, `items[]`, `next`

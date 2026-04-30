@@ -1,33 +1,41 @@
-/** Bsale stock consumption entity */
+/** Consumo de stock (egreso). */
 export interface BsaleStockConsumption {
   readonly id: number;
-  readonly admissionDate: number;
-  readonly document?: string;
+  readonly consumptionDate: number;
   readonly note?: string;
-  readonly imagestionCcWorked: number;
-  readonly imagestionCcDocId: number;
-  readonly state: number;
-  readonly office?: {
-    readonly id: number;
-    readonly href: string;
-  };
-  readonly details?: {
-    readonly href: string;
-  };
+  readonly imagestionCcdescription?: string;
+  readonly imagestionCenterCostId?: number | null;
+  readonly updateStock?: 0 | 1;
+  readonly consumptionTypeId?: number;
+  readonly office?: { readonly id: number; readonly href: string };
+  readonly user?: { readonly id: number; readonly href: string };
+  readonly details?: { readonly href: string };
   readonly href: string;
 }
 
-/** Detail line for a stock consumption */
+/** Item del sub-recurso `/stocks/consumptions/{id}/details`. */
 export interface BsaleStockConsumptionDetail {
-  readonly variantId: number;
+  readonly id: number;
   readonly quantity: number;
+  readonly cost: number;
+  readonly variantStock: number;
+  readonly variant: { readonly id: number; readonly href: string };
+  readonly href: string;
 }
 
-/** Payload for creating a stock consumption */
+/** Detalle de input para POST. Identifica variante por `variantId`/`code`/`barCode`. */
+export interface BsaleStockConsumptionDetailCreate {
+  readonly quantity: number;
+  readonly variantId?: number;
+  readonly code?: string;
+  readonly barCode?: string;
+  readonly serialNumber?: string;
+}
+
+/** Payload `POST /stocks/consumptions.json`. */
 export interface BsaleStockConsumptionPayload {
   readonly officeId: number;
-  readonly admissionDate?: number;
-  readonly document?: string;
   readonly note?: string;
-  readonly details: BsaleStockConsumptionDetail[];
+  readonly consumptionTypeId?: number;
+  readonly details: ReadonlyArray<BsaleStockConsumptionDetailCreate>;
 }

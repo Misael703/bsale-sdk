@@ -1,35 +1,55 @@
 import { BaseResource } from './base.resource';
-import type { BsaleVariant, BsaleVariantPayload } from '../types';
+import type {
+  BsaleVariant,
+  BsaleVariantPayload,
+  BsaleVariantAttributeValue,
+  BsaleVariantCosts,
+  BsaleListResponse,
+  BsaleQueryParams,
+} from '../types';
 
-/** Resource for managing Bsale product variants */
+/** Variantes de productos. */
 export class VariantsResource extends BaseResource<BsaleVariant> {
   protected readonly path = 'variants';
 
-  /**
-   * Creates a new variant.
-   * @param data - Variant data
-   * @returns The created variant
-   */
+  /** Crea una variante. Requiere que el producto padre exista. */
   async create(data: BsaleVariantPayload): Promise<BsaleVariant> {
     return this.http.post<BsaleVariant>('/variants.json', data);
   }
 
-  /**
-   * Updates an existing variant.
-   * @param id - Variant ID
-   * @param data - Variant data to update
-   * @returns The updated variant
-   */
+  /** Actualiza campos de una variante. */
   async update(id: number, data: BsaleVariantPayload): Promise<BsaleVariant> {
     return this.http.put<BsaleVariant>(`/variants/${id}.json`, data);
   }
 
-  /**
-   * Gets cost information for a variant.
-   * @param variantId - Variant ID
-   * @returns Cost data
-   */
-  async getCosts(variantId: number): Promise<unknown> {
-    return this.http.get(`/variants/${variantId}/costs.json`);
+  /** Soft delete: cambia `state` a 1. */
+  async delete(id: number): Promise<void> {
+    await this.http.delete(`/variants/${id}.json`);
+  }
+
+  /** Costo histórico (FIFO) de una variante. */
+  async getCosts(variantId: number): Promise<BsaleVariantCosts> {
+    return this.http.get<BsaleVariantCosts>(`/variants/${variantId}/costs.json`);
+  }
+
+  /** Lista los valores de atributos asignados a una variante. */
+  async getAttributeValues(
+    variantId: number,
+    params?: BsaleQueryParams,
+  ): Promise<BsaleListResponse<BsaleVariantAttributeValue>> {
+    return this.http.get<BsaleListResponse<BsaleVariantAttributeValue>>(
+      `/variants/${variantId}/attribute_values.json`,
+      params,
+    );
+  }
+
+  /** Obtiene un valor de atributo individual. */
+  async getAttributeValueById(
+    variantId: number,
+    attributeValueId: number,
+  ): Promise<BsaleVariantAttributeValue> {
+    return this.http.get<BsaleVariantAttributeValue>(
+      `/variants/${variantId}/attribute_values/${attributeValueId}.json`,
+    );
   }
 }

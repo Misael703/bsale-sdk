@@ -1,3 +1,4 @@
+// Recursos legacy (existentes en v0.1.0).
 export { ProductsResource } from './products.resource';
 export { VariantsResource } from './variants.resource';
 export { DocumentsResource } from './documents.resource';
@@ -15,3 +16,23 @@ export { ThirdPartyDocumentsResource } from './third-party-documents.resource';
 export { ProductTypesResource } from './product-types.resource';
 export { UsersResource } from './users.resource';
 export { ShippingTypesResource } from './shipping-types.resource';
+
+// Recursos nuevos (v0.2.0).
+export { PaymentsResource } from './payments.resource';
+export { DynamicAttributesResource } from './dynamic-attributes.resource';
+export { DiscountsResource } from './discounts.resource';
+export { CurrenciesResource } from './currencies.resource';
+export { SaleConditionsResource } from './sale-conditions.resource';
+export { InstancesResource } from './instances.resource';
+export { BookTypesResource } from './book-types.resource';
+export { DteCodesResource } from './dte-codes.resource';
+export { TaxesResource } from './taxes.resource';
+export { StockConsumptionTypesResource } from './stock-consumption-types.resource';
+export { CartsResource } from './carts.resource';
+export { CheckoutsResource } from './checkouts.resource';
+export { WebDescriptionsResource } from './web-descriptions.resource';
+export { CollectionsResource } from './collections.resource';
+export { VariantShippingResource } from './variant-shipping.resource';
+export { CouponsResource } from './coupons.resource';
+export { CourierOrdersResource } from './courier-orders.resource';
+export { PaymentsGatewayResource } from './payments-gateway.resource';

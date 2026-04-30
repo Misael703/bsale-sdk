@@ -32,6 +32,16 @@ export class ProductTypesResource extends BaseResource<BsaleProductType> {
     return this.http.get<BsaleListResponse<BsaleProductTypeAttribute>>(`/product_types/${productTypeId}/attributes.json`, params);
   }
 
+  /** Atributo individual de un tipo de producto. */
+  async getAttributeById(
+    productTypeId: number,
+    attributeId: number,
+  ): Promise<BsaleProductTypeAttribute> {
+    return this.http.get<BsaleProductTypeAttribute>(
+      `/product_types/${productTypeId}/attributes/${attributeId}.json`,
+    );
+  }
+
   /**
    * Creates a new product type.
    * @param data - Product type data

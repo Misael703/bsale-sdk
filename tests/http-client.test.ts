@@ -55,6 +55,33 @@ describe('HttpClient', () => {
       const url = client.buildUrl('products.json');
       expect(url).toBe('https://api.bsale.io/v1/products.json');
     });
+
+    it('should rewrite version when path starts with /v2/', () => {
+      const url = client.buildUrl('/v2/products/pack.json');
+      expect(url).toBe('https://api.bsale.io/v2/products/pack.json');
+    });
+
+    it('should rewrite version when path starts with /v3/', () => {
+      const url = client.buildUrl('/v3/products/1/product_images.json');
+      expect(url).toBe('https://api.bsale.io/v3/products/1/product_images.json');
+    });
+  });
+
+  describe('skipAuth', () => {
+    it('should not send access_token when skipAuth=true', async () => {
+      mockFetch.mockResolvedValueOnce(jsonResponse({ ok: true }));
+      await client.get('/payment/state/abc', undefined, { skipAuth: true });
+      const [, init] = mockFetch.mock.calls[0];
+      expect(init.headers['access_token']).toBeUndefined();
+      expect(init.headers['Content-Type']).toBe('application/json');
+    });
+
+    it('should send access_token by default', async () => {
+      mockFetch.mockResolvedValueOnce(jsonResponse({ ok: true }));
+      await client.get('/products.json');
+      const [, init] = mockFetch.mock.calls[0];
+      expect(init.headers['access_token']).toBe('test-token-123');
+    });
   });
 
   describe('headers', () => {

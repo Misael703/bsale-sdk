@@ -27,6 +27,13 @@ export class PriceListsResource extends BaseResource<BsalePriceList> {
     );
   }
 
+  /** Detalle individual de una lista de precios. */
+  async getDetailById(priceListId: number, detailId: number): Promise<BsalePriceListDetail> {
+    return this.http.get<BsalePriceListDetail>(
+      `/price_lists/${priceListId}/details/${detailId}.json`,
+    );
+  }
+
   /**
    * Updates a specific detail within a price list.
    * @param priceListId - Price list ID

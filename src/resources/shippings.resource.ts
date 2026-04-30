@@ -1,26 +1,49 @@
 import { BaseResource } from './base.resource';
-import type { BsaleShipping, BsaleShippingPayload } from '../types';
+import type {
+  BsaleShipping,
+  BsaleShippingDetail,
+  BsaleCreateShippingPayload,
+  BsaleListResponse,
+  BsaleQueryParams,
+} from '../types';
 
-/** Resource for managing Bsale shippings (despachos) */
+/**
+ * Despachos (guías de despacho DTE).
+ *
+ * Crear un despacho descuenta stock automáticamente; eliminarlo lo revierte.
+ * No existe endpoint PUT en la API oficial.
+ */
 export class ShippingsResource extends BaseResource<BsaleShipping> {
   protected readonly path = 'shippings';
 
-  /**
-   * Creates a new shipping.
-   * @param data - Shipping data
-   * @returns The created shipping
-   */
-  async create(data: BsaleShippingPayload): Promise<BsaleShipping> {
+  /** Crea un despacho. Genera automáticamente la guía DTE asociada. */
+  async create(data: BsaleCreateShippingPayload): Promise<BsaleShipping> {
     return this.http.post<BsaleShipping>('/shippings.json', data);
   }
 
   /**
-   * Updates an existing shipping.
-   * @param id - Shipping ID
-   * @param data - Shipping data to update
-   * @returns The updated shipping
+   * Anula un despacho. Pone `state=1` y **revierte el descuento de stock**.
+   * Response: `{ status, data: <despacho con state=1> }`.
    */
-  async update(id: number, data: BsaleShippingPayload): Promise<BsaleShipping> {
-    return this.http.put<BsaleShipping>(`/shippings/${id}.json`, data);
+  async delete(id: number): Promise<{ status: string; data: BsaleShipping }> {
+    return this.http.delete<{ status: string; data: BsaleShipping }>(`/shippings/${id}.json`);
+  }
+
+  /** Lista los items de un despacho. */
+  async getDetails(
+    shippingId: number,
+    params?: BsaleQueryParams,
+  ): Promise<BsaleListResponse<BsaleShippingDetail>> {
+    return this.http.get<BsaleListResponse<BsaleShippingDetail>>(
+      `/shippings/${shippingId}/details.json`,
+      params,
+    );
+  }
+
+  /** Obtiene un item individual del despacho. */
+  async getDetailById(shippingId: number, detailId: number): Promise<BsaleShippingDetail> {
+    return this.http.get<BsaleShippingDetail>(
+      `/shippings/${shippingId}/details/${detailId}.json`,
+    );
   }
 }

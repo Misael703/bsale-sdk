@@ -9,35 +9,41 @@ import type {
   BsaleQueryParams,
 } from '../types';
 
-/** Resource for managing Bsale returns (devoluciones) */
+/** Devoluciones (notas de crédito y notas de débito al anular). */
 export class ReturnsResource extends BaseResource<BsaleReturn> {
   protected readonly path = 'returns';
 
-  /**
-   * Lists details for a specific return.
-   * @param returnId - Return ID
-   * @param params - Optional query parameters
-   * @returns Paginated list of return details
-   */
-  async getDetails(returnId: number, params?: BsaleQueryParams): Promise<BsaleListResponse<BsaleReturnDetail>> {
-    return this.http.get<BsaleListResponse<BsaleReturnDetail>>(`/returns/${returnId}/details.json`, params);
+  /** Lista los detalles de una devolución. */
+  async getDetails(
+    returnId: number,
+    params?: BsaleQueryParams,
+  ): Promise<BsaleListResponse<BsaleReturnDetail>> {
+    return this.http.get<BsaleListResponse<BsaleReturnDetail>>(
+      `/returns/${returnId}/details.json`,
+      params,
+    );
   }
 
-  /**
-   * Creates a new return (credit note).
-   * @param data - Return data
-   * @returns The created return
-   */
+  /** Obtiene un detalle individual. */
+  async getDetailById(returnId: number, detailId: number): Promise<BsaleReturnDetail> {
+    return this.http.get<BsaleReturnDetail>(
+      `/returns/${returnId}/details/${detailId}.json`,
+    );
+  }
+
+  /** Crea una devolución (nota de crédito). */
   async create(data: BsaleReturnCreatePayload): Promise<BsaleReturn> {
     return this.http.post<BsaleReturn>('/returns.json', data);
   }
 
   /**
-   * Annuls a return by creating a debit note.
-   * @param data - Annulment data
-   * @returns The annulment result
+   * Anula una devolución generando una nota de débito.
+   * @param returnId ID de la devolución a anular
    */
-  async annul(data: BsaleReturnAnnulmentPayload): Promise<BsaleReturnAnnulment> {
-    return this.http.post<BsaleReturnAnnulment>('/returns/annulments.json', data);
+  async annul(returnId: number, data: BsaleReturnAnnulmentPayload): Promise<BsaleReturnAnnulment> {
+    return this.http.post<BsaleReturnAnnulment>(
+      `/returns/${returnId}/annulments.json`,
+      data,
+    );
   }
 }

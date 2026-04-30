@@ -1,16 +1,39 @@
 import { BaseResource } from './base.resource';
-import type { BsaleStockConsumption, BsaleStockConsumptionPayload } from '../types';
+import type {
+  BsaleStockConsumption,
+  BsaleStockConsumptionDetail,
+  BsaleStockConsumptionPayload,
+  BsaleListResponse,
+  BsaleQueryParams,
+} from '../types';
 
-/** Resource for managing Bsale stock consumptions */
+/** Consumos de stock (egresos sin venta). */
 export class StockConsumptionsResource extends BaseResource<BsaleStockConsumption> {
   protected readonly path = 'stocks/consumptions';
 
-  /**
-   * Creates a new stock consumption.
-   * @param data - Stock consumption data with office, date, and detail lines
-   * @returns The created stock consumption
-   */
+  /** Crea un consumo. Una vez creado no se puede modificar ni eliminar. */
   async create(data: BsaleStockConsumptionPayload): Promise<BsaleStockConsumption> {
     return this.http.post<BsaleStockConsumption>('/stocks/consumptions.json', data);
+  }
+
+  /** Lista los items de un consumo. */
+  async getDetails(
+    consumptionId: number,
+    params?: BsaleQueryParams,
+  ): Promise<BsaleListResponse<BsaleStockConsumptionDetail>> {
+    return this.http.get<BsaleListResponse<BsaleStockConsumptionDetail>>(
+      `/stocks/consumptions/${consumptionId}/details.json`,
+      params,
+    );
+  }
+
+  /** Item individual de un consumo. */
+  async getDetailById(
+    consumptionId: number,
+    detailId: number,
+  ): Promise<BsaleStockConsumptionDetail> {
+    return this.http.get<BsaleStockConsumptionDetail>(
+      `/stocks/consumptions/${consumptionId}/details/${detailId}.json`,
+    );
   }
 }

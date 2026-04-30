@@ -1,8 +1,33 @@
-/** Configuration options for the Bsale SDK client */
+/**
+ * Optional override for each Bsale API host. Defaults are documented at:
+ * https://docs.bsale.dev (only Chile is supported by this SDK).
+ */
+export interface BsaleHosts {
+  /** Main API. Default: https://api.bsale.io */
+  readonly api?: string;
+  /** Aceptación/reclamo de DTE de terceros. Default: https://bsp-api.bsale.io */
+  readonly bsp?: string;
+  /** Metadata de la instancia (token-based). Default: https://credential.bsale.io */
+  readonly credential?: string;
+  /** Integración con couriers. Default: https://courier.bsale.io */
+  readonly courier?: string;
+  /** Pasarela de pagos (lado MPE). Default: https://bcash.bsale.io */
+  readonly bcash?: string;
+}
+
+/** Configuration options for the Bsale SDK client (Chile only) */
 export interface BsaleConfig {
   /** Bsale API access token */
   readonly accessToken: string;
-  /** Base URL for the Bsale API (default: https://api.bsale.io/v1) */
+  /**
+   * Hosts overrides. Útil para apuntar a entornos sandbox o proxies.
+   * Si solo se consume el recurso principal, omitir.
+   */
+  readonly hosts?: BsaleHosts;
+  /**
+   * @deprecated Usar `hosts.api` en su lugar. Si se pasa, se interpreta como
+   * el host principal (`api.bsale.io`). Mantenido para compatibilidad con v0.1.x.
+   */
   readonly baseUrl?: string;
   /** Request timeout in milliseconds (default: 15000) */
   readonly timeout?: number;

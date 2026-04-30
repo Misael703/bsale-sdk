@@ -1,12 +1,14 @@
 // Main client
 export { BsaleClient } from './client/bsale-client';
 export { HttpClient } from './client/http-client';
+export type { HttpRequestOptions } from './client/http-client';
 
 // Error
 export { BsaleApiError } from './errors/bsale.error';
 
 // Resources
 export {
+  // Legacy v0.1.0
   ProductsResource,
   VariantsResource,
   DocumentsResource,
@@ -24,41 +26,111 @@ export {
   ProductTypesResource,
   UsersResource,
   ShippingTypesResource,
+  // Nuevos en v0.2.0
+  PaymentsResource,
+  DynamicAttributesResource,
+  DiscountsResource,
+  CurrenciesResource,
+  SaleConditionsResource,
+  InstancesResource,
+  BookTypesResource,
+  DteCodesResource,
+  TaxesResource,
+  StockConsumptionTypesResource,
+  CartsResource,
+  CheckoutsResource,
+  WebDescriptionsResource,
+  CollectionsResource,
+  VariantShippingResource,
+  CouponsResource,
+  CourierOrdersResource,
+  PaymentsGatewayResource,
 } from './resources';
 
 // Types
 export type {
+  // Config
   BsaleConfig,
+  BsaleHosts,
+  // Common
   BsaleListResponse,
   BsaleQueryParams,
   BsalePaginateOptions,
+  // Productos / variantes
   BsaleProduct,
+  BsaleProductTax,
   BsaleProductPayload,
+  BsaleProductUpdatePayload,
+  BsalePackDetailInput,
+  BsaleCreatePackPayload,
+  BsalePackDetailItem,
+  BsalePack,
   BsaleVariant,
   BsaleVariantPayload,
+  BsaleVariantAttributeValue,
+  BsaleVariantAttributeValueInput,
+  BsaleVariantCosts,
+  // Documentos
   BsaleDocument,
   BsaleDocumentDetail,
   BsaleDocumentPayment,
   BsaleDocumentReference,
   BsaleDocumentDispatch,
   BsaleDocumentCreatePayload,
+  BsaleDocumentDetailItem,
+  BsaleDocumentReferenceItem,
+  BsaleDocumentTaxItem,
+  BsaleDocumentSellerItem,
+  BsaleDocumentAttributeItem,
+  BsaleDocumentSummary,
+  BsaleDocumentCost,
+  BsaleDocumentDynamicAttribute,
+  BsaleDocumentCustomsData,
+  // Clientes
   BsaleClient as BsaleClientType,
   BsaleClientPayload,
+  BsaleClientUpdatePayload,
+  BsaleClientDynamicAttributeInput,
+  BsaleClientContact,
+  BsaleClientContactPayload,
+  BsaleClientAddress,
+  BsaleClientAddressPayload,
+  BsaleClientAttributeItem,
+  BsaleClientPointsPayload,
+  // Listas de precio
   BsalePriceList,
   BsalePriceListDetail,
   BsalePriceListDetailPayload,
+  // Stock
   BsaleStock,
+  // Tipos de documento
   BsaleDocumentType,
+  BsaleUpdateDocumentTypePayload,
+  BsaleCaf,
+  BsaleNumbersAvailable,
+  // Sucursales
   BsaleOffice,
+  BsaleCreateOfficePayload,
+  BsaleUpdateOfficePayload,
+  // Despachos
   BsaleShipping,
-  BsaleShippingPayload,
+  BsaleShippingDetail,
+  BsaleCreateShippingPayload,
+  // Formas de pago
   BsalePaymentType,
+  BsaleCreatePaymentTypePayload,
+  // Stock receptions / consumptions
   BsaleStockReception,
   BsaleStockReceptionDetail,
+  BsaleStockReceptionDetailCreate,
+  BsaleStockReceptionDetailUpdate,
   BsaleStockReceptionPayload,
+  BsaleStockReceptionUpdatePayload,
   BsaleStockConsumption,
   BsaleStockConsumptionDetail,
+  BsaleStockConsumptionDetailCreate,
   BsaleStockConsumptionPayload,
+  // Devoluciones
   BsaleReturn,
   BsaleReturnDetail,
   BsaleReturnDetailPayload,
@@ -66,15 +138,104 @@ export type {
   BsaleReturnCreatePayload,
   BsaleReturnAnnulmentPayload,
   BsaleReturnAnnulment,
+  // Documentos de terceros
   BsaleThirdPartyDocument,
+  BsaleSiiActionCode,
+  BsaleClaimPayload,
+  BsaleClaimResponse,
+  BsaleClaimStatusItem,
+  BsaleClaimQuery,
+  // Tipos de producto
   BsaleProductType,
   BsaleProductTypeAttribute,
   BsaleProductTypeAttributePayload,
   BsaleProductTypePayload,
+  // Usuarios
   BsaleUser,
   BsaleUserSalesSummary,
+  // Tipos de despacho
   BsaleShippingType,
+  // Webhooks
   BsaleWebhookPayload,
+  BsaleWebhookTopic,
+  BsaleDocumentWebhookPayload,
+  BsaleProductWebhookPayload,
+  BsaleVariantWebhookPayload,
+  BsalePriceWebhookPayload,
+  BsaleStockWebhookPayload,
+  BsalePaymentWebhookPayload,
+  BsaleCourierOrderWebhookPayload,
+  // Atributos dinámicos
+  BsaleDynamicAttribute,
+  BsaleDynamicAttributeDetail,
+  // Catálogos read-only
+  BsaleBookType,
+  BsaleDteCode,
+  BsaleTax,
+  BsaleSaleCondition,
+  BsaleCurrency,
+  BsaleExchangeRate,
+  BsaleStockConsumptionType,
+  // Pagos
+  BsalePayment,
+  BsalePaymentDynamicAttribute,
+  BsalePaymentCreatePayload,
+  BsalePaymentGrouped,
+  BsaleClientPurchase,
+  BsaleUnpaidDocument,
+  BsaleUnpaidDocumentsResponse,
+  // Cupones
+  BsaleCoupon,
+  BsaleCouponType,
+  BsaleCouponProperties,
+  BsaleCreateCouponPayload,
+  BsaleUpdateCouponPayload,
+  // Descuentos
+  BsaleDiscount,
+  BsaleCreateDiscountPayload,
+  BsaleAddDiscountDetailPayload,
+  BsaleDiscountDetail,
+  // Instancias
+  BsaleInstance,
+  // Courier
+  BsaleCourierOrder,
+  BsaleCourierState,
+  BsaleCourierAddress,
+  BsaleCourierContact,
+  BsaleDeliveryType,
+  BsaleCourierOrderDetail,
+  BsaleCourierLogPayload,
+  BsaleCourierLabelPayload,
+  // Pasarela de pagos
+  BsalePaymentSuccessData,
+  BsalePaymentSuccessPayload,
+  BsalePaymentFailPayload,
+  BsalePaymentLogPayload,
+  BsalePaymentPendingPayload,
+  BsalePaymentGatewayResponse,
+  // E-commerce
+  BsaleCartItem,
+  BsaleCartItemPayload,
+  BsaleCartPayload,
+  BsaleCheckout,
+  BsaleCheckoutExtrasUserData,
+  BsaleCreateCheckoutPayload,
+  BsaleUpdateCheckoutPayload,
+  BsalePayProcess,
+  BsaleOrderStatus,
+  BsaleWebDescription,
+  BsaleWebDescriptionType,
+  BsaleProductPicture,
+  BsaleWebDescriptionPictureInput,
+  BsaleWebDescriptionOrderedVariantInput,
+  BsaleWebDescriptionVariantShippingInput,
+  BsaleCreateWebDescriptionPayload,
+  BsaleUpdateWebDescriptionPayload,
+  BsaleCollection,
+  BsaleAddProductToCollectionPayload,
+  BsaleVariantShipping,
+  BsaleCreateVariantShippingPayload,
+  BsaleUpdateVariantShippingPayload,
 } from './types';
 
 // Utilities

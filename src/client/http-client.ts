@@ -6,6 +6,15 @@ interface CacheEntry {
   readonly expiresAt: number;
 }
 
+/** Per-request options that override defaults */
+export interface HttpRequestOptions {
+  /**
+   * Si es true, no envía el header `access_token`. Usar para endpoints donde
+   * la credencial va en el path (ej. pasarela de pagos `bcash.bsale.io`).
+   */
+  readonly skipAuth?: boolean;
+}
+
 const DEFAULT_BASE_URL = 'https://api.bsale.io/v1';
 const DEFAULT_TIMEOUT = 15_000;
 const DEFAULT_MAX_RETRIES = 3;
@@ -15,6 +24,9 @@ const DEFAULT_CACHE_TTL_MS = 60_000;
  * Low-level HTTP client for the Bsale API.
  * Handles authentication, caching, retry with exponential backoff,
  * rate limiting, and timeout via AbortController.
+ *
+ * Soporta paths con versión explícita (`/v2/...`, `/v3/...`): el cliente
+ * sustituye la versión en la `baseUrl` configurada.
  */
 export class HttpClient {
   private readonly accessToken: string;
@@ -25,7 +37,7 @@ export class HttpClient {
   private readonly logger?: (message: string, data?: Record<string, unknown>) => void;
   private readonly cache = new Map<string, CacheEntry>();
 
-  constructor(config: BsaleConfig) {
+  constructor(config: BsaleConfig & { baseUrl?: string }) {
     this.accessToken = config.accessToken;
     this.baseUrl = (config.baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, '');
     this.timeout = config.timeout ?? DEFAULT_TIMEOUT;
@@ -38,8 +50,13 @@ export class HttpClient {
    * Performs a GET request with caching support.
    * @param path - API path (e.g., '/products.json')
    * @param params - Optional query parameters
+   * @param options - Per-request overrides (e.g., skipAuth)
    */
-  async get<T>(path: string, params?: Record<string, unknown>): Promise<T> {
+  async get<T>(
+    path: string,
+    params?: Record<string, unknown>,
+    options?: HttpRequestOptions,
+  ): Promise<T> {
     const url = this.buildUrl(path, params);
     const cacheKey = url;
 
@@ -49,7 +66,7 @@ export class HttpClient {
       return cached.data as T;
     }
 
-    const result = await this.request<T>('GET', url);
+    const result = await this.request<T>('GET', url, undefined, options);
 
     this.cache.set(cacheKey, {
       data: result,
@@ -61,43 +78,36 @@ export class HttpClient {
 
   /**
    * Performs a POST request. Invalidates cache for the resource path.
-   * @param path - API path
-   * @param body - Request body
    */
-  async post<T>(path: string, body?: unknown): Promise<T> {
+  async post<T>(path: string, body?: unknown, options?: HttpRequestOptions): Promise<T> {
     const url = this.buildUrl(path);
-    const result = await this.request<T>('POST', url, body);
+    const result = await this.request<T>('POST', url, body, options);
     this.invalidateCacheByPath(path);
     return result;
   }
 
   /**
    * Performs a PUT request. Invalidates cache for the resource path.
-   * @param path - API path
-   * @param body - Request body
    */
-  async put<T>(path: string, body?: unknown): Promise<T> {
+  async put<T>(path: string, body?: unknown, options?: HttpRequestOptions): Promise<T> {
     const url = this.buildUrl(path);
-    const result = await this.request<T>('PUT', url, body);
+    const result = await this.request<T>('PUT', url, body, options);
     this.invalidateCacheByPath(path);
     return result;
   }
 
   /**
    * Performs a DELETE request. Invalidates cache for the resource path.
-   * @param path - API path
    */
-  async delete<T>(path: string): Promise<T> {
+  async delete<T>(path: string, options?: HttpRequestOptions): Promise<T> {
     const url = this.buildUrl(path);
-    const result = await this.request<T>('DELETE', url);
+    const result = await this.request<T>('DELETE', url, undefined, options);
     this.invalidateCacheByPath(path);
     return result;
   }
 
   /**
    * Invalidates cached entries matching an optional path pattern.
-   * If no pattern is provided, clears the entire cache.
-   * @param pathPattern - Optional substring to match against cache keys
    */
   invalidateCache(pathPattern?: string): void {
     if (!pathPattern) {
@@ -113,7 +123,10 @@ export class HttpClient {
 
   /**
    * Builds a full URL from a path and optional query params.
-   * Supports absolute URLs (used for pagination 'next' links).
+   * - Absolute URLs (http://, https://) se usan tal cual.
+   * - Paths con prefijo de versión explícita (`/v2/...`, `/v3/...`) reemplazan
+   *   la versión en `baseUrl`.
+   * - El resto se concatena con `baseUrl` directamente.
    */
   buildUrl(path: string, params?: Record<string, unknown>): string {
     let url: string;
@@ -122,7 +135,13 @@ export class HttpClient {
       url = path;
     } else {
       const cleanPath = path.startsWith('/') ? path : `/${path}`;
-      url = `${this.baseUrl}${cleanPath}`;
+      const versionMatch = cleanPath.match(/^\/(v\d+)\//);
+      if (versionMatch) {
+        const baseWithoutVersion = this.baseUrl.replace(/\/v\d+$/, '');
+        url = `${baseWithoutVersion}${cleanPath}`;
+      } else {
+        url = `${this.baseUrl}${cleanPath}`;
+      }
     }
 
     if (params && Object.keys(params).length > 0) {
@@ -139,7 +158,12 @@ export class HttpClient {
     return url;
   }
 
-  private async request<T>(method: string, url: string, body?: unknown): Promise<T> {
+  private async request<T>(
+    method: string,
+    url: string,
+    body?: unknown,
+    options?: HttpRequestOptions,
+  ): Promise<T> {
     let lastError: Error | undefined;
 
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
@@ -150,9 +174,11 @@ export class HttpClient {
         this.logger?.(`${method} ${url}`, { attempt });
 
         const headers: Record<string, string> = {
-          'access_token': this.accessToken,
           'Content-Type': 'application/json',
         };
+        if (!options?.skipAuth) {
+          headers['access_token'] = this.accessToken;
+        }
 
         const init: RequestInit = {
           method,
@@ -191,7 +217,6 @@ export class HttpClient {
           );
         }
 
-        // Bsale sometimes returns 200 with empty body
         const text = await response.text();
         if (!text || text.trim() === '') {
           return {} as T;
@@ -224,7 +249,6 @@ export class HttpClient {
   }
 
   private invalidateCacheByPath(path: string): void {
-    // Extract the resource base from the path (e.g., '/products/123.json' → 'products')
     const match = path.match(/\/?([a-z_]+)/);
     if (match) {
       this.invalidateCache(match[1]);
