@@ -35,6 +35,11 @@ export interface BsaleConfig {
   readonly maxRetries?: number;
   /** Cache time-to-live in milliseconds (default: 60000) */
   readonly cacheTtlMs?: number;
+  /**
+   * Máximo de entradas en el cache LRU (default: 1000). Cuando se supera,
+   * se descarta la entrada accedida menos recientemente.
+   */
+  readonly cacheMaxEntries?: number;
   /** Optional logger callback for request/response logging */
   readonly logger?: (message: string, data?: Record<string, unknown>) => void;
 }

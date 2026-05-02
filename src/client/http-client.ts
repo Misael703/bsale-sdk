@@ -1,4 +1,5 @@
 import { BsaleApiError } from '../errors/bsale.error';
+import { LRUCache } from '../utils/lru-cache';
 import type { BsaleConfig } from '../types';
 
 interface CacheEntry {
@@ -19,6 +20,7 @@ const DEFAULT_BASE_URL = 'https://api.bsale.io/v1';
 const DEFAULT_TIMEOUT = 15_000;
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_CACHE_TTL_MS = 60_000;
+const DEFAULT_CACHE_MAX_ENTRIES = 1000;
 const DEFAULT_RETRY_AFTER_MS = 1_000;
 const MAX_RETRY_AFTER_MS = 60_000;
 
@@ -37,7 +39,8 @@ export class HttpClient {
   private readonly maxRetries: number;
   private readonly cacheTtlMs: number;
   private readonly logger?: (message: string, data?: Record<string, unknown>) => void;
-  private readonly cache = new Map<string, CacheEntry>();
+  private readonly cache: LRUCache<CacheEntry>;
+  private readonly inFlight = new Map<string, Promise<unknown>>();
 
   constructor(config: BsaleConfig & { baseUrl?: string }) {
     this.accessToken = config.accessToken;
@@ -45,6 +48,7 @@ export class HttpClient {
     this.timeout = config.timeout ?? DEFAULT_TIMEOUT;
     this.maxRetries = config.maxRetries ?? DEFAULT_MAX_RETRIES;
     this.cacheTtlMs = config.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
+    this.cache = new LRUCache<CacheEntry>(config.cacheMaxEntries ?? DEFAULT_CACHE_MAX_ENTRIES);
     this.logger = config.logger;
   }
 
@@ -68,14 +72,28 @@ export class HttpClient {
       return structuredClone(cached.data) as T;
     }
 
-    const result = await this.request<T>('GET', url, undefined, options);
+    const inflight = this.inFlight.get(cacheKey);
+    if (inflight) {
+      this.logger?.('Coalesced request', { url });
+      const shared = await inflight;
+      return structuredClone(shared) as T;
+    }
 
-    this.cache.set(cacheKey, {
-      data: structuredClone(result),
-      expiresAt: Date.now() + this.cacheTtlMs,
-    });
+    const sharedPromise = this.request<T>('GET', url, undefined, options).then((data) =>
+      structuredClone(data),
+    );
+    this.inFlight.set(cacheKey, sharedPromise);
 
-    return result;
+    try {
+      const shared = await sharedPromise;
+      this.cache.set(cacheKey, {
+        data: shared,
+        expiresAt: Date.now() + this.cacheTtlMs,
+      });
+      return structuredClone(shared) as T;
+    } finally {
+      this.inFlight.delete(cacheKey);
+    }
   }
 
   /**

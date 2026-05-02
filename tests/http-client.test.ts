@@ -388,4 +388,150 @@ describe('HttpClient', () => {
       expect(mockFetch).toHaveBeenCalledOnce();
     });
   });
+
+  describe('LRU eviction', () => {
+    it('evicts least-recently-used entries when over cacheMaxEntries', async () => {
+      const lruClient = new HttpClient({
+        accessToken: 'tk',
+        baseUrl: 'https://api.bsale.io/v1',
+        cacheTtlMs: 60_000,
+        cacheMaxEntries: 2,
+        maxRetries: 0,
+      });
+
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse({ items: [{ id: 1 }] }))
+        .mockResolvedValueOnce(jsonResponse({ items: [{ id: 2 }] }))
+        .mockResolvedValueOnce(jsonResponse({ items: [{ id: 3 }] }))
+        .mockResolvedValueOnce(jsonResponse({ items: [{ id: 1 }] }));
+
+      await lruClient.get('/a.json');
+      await lruClient.get('/b.json');
+      await lruClient.get('/c.json');
+      await lruClient.get('/a.json');
+
+      expect(mockFetch).toHaveBeenCalledTimes(4);
+    });
+
+    it('keeps most-recently-used entries alive on read bump', async () => {
+      const lruClient = new HttpClient({
+        accessToken: 'tk',
+        baseUrl: 'https://api.bsale.io/v1',
+        cacheTtlMs: 60_000,
+        cacheMaxEntries: 2,
+        maxRetries: 0,
+      });
+
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse({ id: 'a' }))
+        .mockResolvedValueOnce(jsonResponse({ id: 'b' }))
+        .mockResolvedValueOnce(jsonResponse({ id: 'c' }))
+        .mockResolvedValueOnce(jsonResponse({ id: 'a-refetched' }));
+
+      await lruClient.get('/a.json');
+      await lruClient.get('/b.json');
+      await lruClient.get('/a.json');
+      await lruClient.get('/c.json');
+      const a = await lruClient.get('/a.json');
+
+      expect(a).toEqual({ id: 'a' });
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  describe('request coalescing', () => {
+    it('deduplicates concurrent identical GETs into a single fetch', async () => {
+      let resolveFetch: ((value: Response) => void) | undefined;
+      mockFetch.mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveFetch = resolve;
+          }),
+      );
+
+      const p1 = client.get('/products.json');
+      const p2 = client.get('/products.json');
+      const p3 = client.get('/products.json');
+
+      expect(mockFetch).toHaveBeenCalledOnce();
+
+      resolveFetch?.(jsonResponse({ items: [{ id: 1 }] }));
+      const [r1, r2, r3] = await Promise.all([p1, p2, p3]);
+
+      expect(r1).toEqual({ items: [{ id: 1 }] });
+      expect(r2).toEqual({ items: [{ id: 1 }] });
+      expect(r3).toEqual({ items: [{ id: 1 }] });
+      expect(mockFetch).toHaveBeenCalledOnce();
+    });
+
+    it('returns independent clones to coalesced callers', async () => {
+      let resolveFetch: ((value: Response) => void) | undefined;
+      mockFetch.mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveFetch = resolve;
+          }),
+      );
+
+      const p1 = client.get<{ items: Array<{ id: number }> }>('/products.json');
+      const p2 = client.get<{ items: Array<{ id: number }> }>('/products.json');
+
+      resolveFetch?.(jsonResponse({ items: [{ id: 1 }] }));
+      const [r1, r2] = await Promise.all([p1, p2]);
+
+      expect(r1).not.toBe(r2);
+      expect(r1.items).not.toBe(r2.items);
+
+      r1.items[0].id = 999;
+      expect(r2.items[0].id).toBe(1);
+    });
+
+    it('propagates errors to all coalesced callers and clears in-flight on failure', async () => {
+      const failClient = new HttpClient({
+        accessToken: 'tk',
+        baseUrl: 'https://api.bsale.io/v1',
+        maxRetries: 0,
+      });
+
+      let rejectFetch: ((err: Error) => void) | undefined;
+      mockFetch
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((_, reject) => {
+              rejectFetch = reject;
+            }),
+        )
+        .mockResolvedValueOnce(jsonResponse({ ok: true }));
+
+      const p1 = failClient.get('/products.json');
+      const p2 = failClient.get('/products.json');
+
+      rejectFetch?.(new Error('boom'));
+
+      await expect(p1).rejects.toThrow('boom');
+      await expect(p2).rejects.toThrow('boom');
+
+      const recovery = await failClient.get('/products.json');
+      expect(recovery).toEqual({ ok: true });
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not coalesce after the first request settles', async () => {
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse({ items: [{ id: 1 }] }))
+        .mockResolvedValueOnce(jsonResponse({ items: [{ id: 2 }] }));
+
+      const noCacheClient = new HttpClient({
+        accessToken: 'tk',
+        baseUrl: 'https://api.bsale.io/v1',
+        cacheTtlMs: 0,
+        maxRetries: 0,
+      });
+
+      await noCacheClient.get('/products.json');
+      await noCacheClient.get('/products.json');
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+  });
 });
