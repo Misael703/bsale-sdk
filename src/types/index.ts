@@ -4,6 +4,7 @@ export type {
   BsaleQueryParams,
   BsalePaginateOptions,
 } from './common.types';
+export type { BsaleMiddleware, BsaleRequestContext } from './middleware.types';
 export type {
   BsaleProduct,
   BsaleProductTax,

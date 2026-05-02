@@ -47,4 +47,10 @@ export interface BsaleConfig {
   readonly cacheTtlByResource?: Readonly<Record<string, number>>;
   /** Optional logger callback for request/response logging */
   readonly logger?: (message: string, data?: Record<string, unknown>) => void;
+  /**
+   * Middlewares aplicados a cada request HTTP. Se ejecutan en orden, estilo
+   * Koa: cada uno recibe `(ctx, next)` y debe llamar a `next()` para continuar.
+   * Útil para tracing, métricas, transformación de headers o respuestas.
+   */
+  readonly middlewares?: ReadonlyArray<import('./middleware.types').BsaleMiddleware>;
 }

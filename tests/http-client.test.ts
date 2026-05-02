@@ -677,6 +677,71 @@ describe('HttpClient', () => {
     });
   });
 
+  describe('idempotency keys', () => {
+    it('sends Idempotency-Key header on POST when provided', async () => {
+      mockFetch.mockResolvedValueOnce(jsonResponse({ id: 1 }));
+
+      await client.post('/products.json', { name: 'foo' }, { idempotencyKey: 'op-123' });
+
+      const [, init] = mockFetch.mock.calls[0];
+      expect(init.headers['Idempotency-Key']).toBe('op-123');
+    });
+
+    it('sends Idempotency-Key on PUT when provided', async () => {
+      mockFetch.mockResolvedValueOnce(jsonResponse({ id: 1 }));
+
+      await client.put('/products/1.json', { name: 'foo' }, { idempotencyKey: 'op-456' });
+
+      const [, init] = mockFetch.mock.calls[0];
+      expect(init.headers['Idempotency-Key']).toBe('op-456');
+    });
+
+    it('does not send Idempotency-Key when not provided', async () => {
+      mockFetch.mockResolvedValueOnce(jsonResponse({ id: 1 }));
+
+      await client.post('/products.json', { name: 'foo' });
+
+      const [, init] = mockFetch.mock.calls[0];
+      expect(init.headers['Idempotency-Key']).toBeUndefined();
+    });
+
+    it('preserves Idempotency-Key across retries', async () => {
+      mockFetch
+        .mockResolvedValueOnce(new Response(null, { status: 500 }))
+        .mockResolvedValueOnce(jsonResponse({ id: 1 }));
+
+      const retryClient = new HttpClient({
+        accessToken: 'tk',
+        baseUrl: 'https://api.bsale.io/v1',
+        cacheTtlMs: 0,
+        maxRetries: 2,
+      });
+
+      await retryClient.post('/products.json', { name: 'x' }, { idempotencyKey: 'stable-key' });
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      const firstHeaders = (mockFetch.mock.calls[0][1] as RequestInit).headers as Record<
+        string,
+        string
+      >;
+      const secondHeaders = (mockFetch.mock.calls[1][1] as RequestInit).headers as Record<
+        string,
+        string
+      >;
+      expect(firstHeaders['Idempotency-Key']).toBe('stable-key');
+      expect(secondHeaders['Idempotency-Key']).toBe('stable-key');
+    });
+
+    it('does not send Idempotency-Key on GET', async () => {
+      mockFetch.mockResolvedValueOnce(jsonResponse({ items: [] }));
+
+      await client.get('/products.json', undefined, { idempotencyKey: 'should-be-ignored' });
+
+      const [, init] = mockFetch.mock.calls[0];
+      expect(init.headers['Idempotency-Key']).toBeUndefined();
+    });
+  });
+
   describe('per-resource TTL', () => {
     it('uses cacheTtlByResource when path matches, falls back otherwise', async () => {
       vi.useFakeTimers();

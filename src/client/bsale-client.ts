@@ -36,7 +36,12 @@ import {
   CourierOrdersResource,
   PaymentsGatewayResource,
 } from '../resources';
-import type { BsaleConfig, BsaleWebhookPayload, BsaleWebhookTopic } from '../types';
+import type {
+  BsaleConfig,
+  BsaleMiddleware,
+  BsaleWebhookPayload,
+  BsaleWebhookTopic,
+} from '../types';
 
 const DEFAULT_HOSTS = {
   api: 'https://api.bsale.io',
@@ -198,6 +203,15 @@ export class BsaleClient {
     this.instances = new InstancesResource(this.credentialHttp, config.accessToken);
     this.courierOrders = new CourierOrdersResource(this.courierHttp);
     this.paymentsGateway = new PaymentsGatewayResource(this.bcashHttp);
+  }
+
+  /** Registra un middleware que se aplica a las requests de los 5 hosts. */
+  use(middleware: BsaleMiddleware): void {
+    this.apiHttp.use(middleware);
+    this.bspHttp.use(middleware);
+    this.credentialHttp.use(middleware);
+    this.courierHttp.use(middleware);
+    this.bcashHttp.use(middleware);
   }
 
   /** Limpia el cache de todos los hosts. */

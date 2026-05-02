@@ -145,4 +145,104 @@ describe('BaseResource', () => {
       expect(result.count).toBe(42);
     });
   });
+
+  describe('iterate', () => {
+    it('yields items lazily across pages', async () => {
+      const page1 = {
+        count: 3,
+        limit: 2,
+        offset: 0,
+        items: [
+          { id: 1, name: 'A' },
+          { id: 2, name: 'B' },
+        ],
+        next: 'https://api.bsale.io/v1/test_items.json?limit=2&offset=2',
+      };
+      const page2 = { count: 3, limit: 2, offset: 2, items: [{ id: 3, name: 'C' }] };
+
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse(page1))
+        .mockResolvedValueOnce(jsonResponse(page2));
+
+      const collected: TestItem[] = [];
+      for await (const item of resource.iterate({}, { pageSize: 2 })) {
+        collected.push(item);
+      }
+
+      expect(collected).toHaveLength(3);
+      expect(collected.map((i) => i.id)).toEqual([1, 2, 3]);
+    });
+
+    it('stops fetching new pages once consumer breaks', async () => {
+      const page1 = {
+        count: 100,
+        limit: 50,
+        offset: 0,
+        items: Array.from({ length: 50 }, (_, i) => ({ id: i + 1, name: `Item ${i + 1}` })),
+        next: 'https://api.bsale.io/v1/test_items.json?limit=50&offset=50',
+      };
+
+      mockFetch.mockResolvedValueOnce(jsonResponse(page1));
+
+      const collected: TestItem[] = [];
+      for await (const item of resource.iterate()) {
+        collected.push(item);
+        if (collected.length === 5) break;
+      }
+
+      expect(collected).toHaveLength(5);
+      expect(mockFetch).toHaveBeenCalledOnce();
+    });
+
+    it('respects maxItems', async () => {
+      const page1 = {
+        count: 100,
+        limit: 50,
+        offset: 0,
+        items: Array.from({ length: 50 }, (_, i) => ({ id: i + 1, name: `Item ${i + 1}` })),
+        next: 'https://api.bsale.io/v1/test_items.json?limit=50&offset=50',
+      };
+
+      mockFetch.mockResolvedValueOnce(jsonResponse(page1));
+
+      const collected: TestItem[] = [];
+      for await (const item of resource.iterate({}, { maxItems: 3 })) {
+        collected.push(item);
+      }
+
+      expect(collected).toHaveLength(3);
+      expect(mockFetch).toHaveBeenCalledOnce();
+    });
+
+    it('aborts when signal is triggered between pages', async () => {
+      const page1 = {
+        count: 4,
+        limit: 2,
+        offset: 0,
+        items: [
+          { id: 1, name: 'A' },
+          { id: 2, name: 'B' },
+        ],
+        next: 'https://api.bsale.io/v1/test_items.json?limit=2&offset=2',
+      };
+
+      mockFetch.mockResolvedValueOnce(jsonResponse(page1));
+
+      const ac = new AbortController();
+      const collected: TestItem[] = [];
+      let caught: unknown;
+
+      try {
+        for await (const item of resource.iterate({}, { pageSize: 2, signal: ac.signal })) {
+          collected.push(item);
+          if (collected.length === 2) ac.abort();
+        }
+      } catch (e) {
+        caught = e;
+      }
+
+      expect(collected).toHaveLength(2);
+      expect((caught as Error)?.name).toBe('AbortError');
+    });
+  });
 });

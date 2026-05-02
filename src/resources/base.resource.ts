@@ -64,6 +64,48 @@ export abstract class BaseResource<T> {
   }
 
   /**
+   * Iterador asíncrono que pagina bajo demanda. Memoria-eficiente para
+   * datasets grandes: emite items uno a uno sin cargar todo en RAM.
+   *
+   * ```ts
+   * for await (const doc of client.documents.iterate({ ... })) { ... }
+   * ```
+   */
+  async *iterate(
+    params?: BsaleQueryParams,
+    options?: BsalePaginateOptions,
+  ): AsyncIterableIterator<T> {
+    const pageSize = Math.min(options?.pageSize ?? MAX_PAGE_SIZE, MAX_PAGE_SIZE);
+    const maxItems = options?.maxItems;
+    let offset = 0;
+    let yielded = 0;
+
+    const requestOptions: HttpRequestOptions | undefined =
+      options?.signal || options?.skipCache
+        ? { signal: options.signal, skipCache: options.skipCache }
+        : undefined;
+
+    while (true) {
+      if (options?.signal?.aborted) {
+        throw options.signal.reason instanceof Error
+          ? options.signal.reason
+          : Object.assign(new Error('Pagination aborted'), { name: 'AbortError' });
+      }
+
+      const response = await this.list({ ...params, limit: pageSize, offset }, requestOptions);
+
+      for (const item of response.items) {
+        yield item;
+        yielded++;
+        if (maxItems && yielded >= maxItems) return;
+      }
+
+      if (!response.next || response.items.length < pageSize) return;
+      offset += pageSize;
+    }
+  }
+
+  /**
    * Fetches a single item by its ID.
    */
   async getById(

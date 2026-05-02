@@ -52,6 +52,9 @@ export type {
   // Config
   BsaleConfig,
   BsaleHosts,
+  // Middleware
+  BsaleMiddleware,
+  BsaleRequestContext,
   // Common
   BsaleListResponse,
   BsaleQueryParams,

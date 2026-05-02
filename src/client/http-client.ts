@@ -1,6 +1,6 @@
 import { BsaleApiError } from '../errors/bsale.error';
 import { LRUCache } from '../utils/lru-cache';
-import type { BsaleConfig } from '../types';
+import type { BsaleConfig, BsaleMiddleware, BsaleRequestContext } from '../types';
 
 interface CacheEntry {
   readonly data: unknown;
@@ -26,6 +26,12 @@ export interface HttpRequestOptions {
    * compartida sigue para el resto.
    */
   readonly signal?: AbortSignal;
+  /**
+   * Idempotency-Key para POST/PUT. Se envía como header `Idempotency-Key`
+   * y se preserva en cada retry interno, así un retry de red no genera
+   * duplicados en el lado del servidor (cuando el servidor lo soporte).
+   */
+  readonly idempotencyKey?: string;
 }
 
 const DEFAULT_BASE_URL = 'https://api.bsale.io/v1';
@@ -54,6 +60,7 @@ export class HttpClient {
   private readonly logger?: (message: string, data?: Record<string, unknown>) => void;
   private readonly cache: LRUCache<CacheEntry>;
   private readonly inFlight = new Map<string, Promise<unknown>>();
+  private readonly middlewares: BsaleMiddleware[];
 
   constructor(config: BsaleConfig & { baseUrl?: string }) {
     this.accessToken = config.accessToken;
@@ -64,6 +71,12 @@ export class HttpClient {
     this.cacheTtlByResource = config.cacheTtlByResource;
     this.cache = new LRUCache<CacheEntry>(config.cacheMaxEntries ?? DEFAULT_CACHE_MAX_ENTRIES);
     this.logger = config.logger;
+    this.middlewares = config.middlewares ? [...config.middlewares] : [];
+  }
+
+  /** Adds a middleware after construction. Applies to all subsequent requests. */
+  use(middleware: BsaleMiddleware): void {
+    this.middlewares.push(middleware);
   }
 
   /**
@@ -230,18 +243,20 @@ export class HttpClient {
         if (!options?.skipAuth) {
           headers['access_token'] = this.accessToken;
         }
+        if (options?.idempotencyKey && (method === 'POST' || method === 'PUT')) {
+          headers['Idempotency-Key'] = options.idempotencyKey;
+        }
 
-        const init: RequestInit = {
+        const ctx: BsaleRequestContext = {
+          url,
           method,
           headers,
+          body,
+          attempt,
           signal: controller.signal,
         };
 
-        if (body !== undefined) {
-          init.body = JSON.stringify(body);
-        }
-
-        const response = await fetch(url, init);
+        const response = await this.runMiddlewares(ctx);
 
         if (response.status === 429) {
           if (attempt >= this.maxRetries) {
@@ -312,6 +327,28 @@ export class HttpClient {
     }
 
     throw lastError ?? new Error(`Request failed after ${this.maxRetries} retries`);
+  }
+
+  private runMiddlewares(ctx: BsaleRequestContext): Promise<Response> {
+    const terminal = (): Promise<Response> => {
+      const init: RequestInit = {
+        method: ctx.method,
+        headers: ctx.headers,
+        signal: ctx.signal,
+      };
+      if (ctx.body !== undefined) {
+        init.body = typeof ctx.body === 'string' ? ctx.body : JSON.stringify(ctx.body);
+      }
+      return fetch(ctx.url, init);
+    };
+
+    if (this.middlewares.length === 0) return terminal();
+
+    const dispatch = (idx: number): Promise<Response> => {
+      if (idx >= this.middlewares.length) return terminal();
+      return this.middlewares[idx](ctx, () => dispatch(idx + 1));
+    };
+    return dispatch(0);
   }
 
   private invalidateCacheByPath(path: string): void {
