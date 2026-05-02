@@ -19,6 +19,8 @@ const DEFAULT_BASE_URL = 'https://api.bsale.io/v1';
 const DEFAULT_TIMEOUT = 15_000;
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_CACHE_TTL_MS = 60_000;
+const DEFAULT_RETRY_AFTER_MS = 1_000;
+const MAX_RETRY_AFTER_MS = 60_000;
 
 /**
  * Low-level HTTP client for the Bsale API.
@@ -63,13 +65,13 @@ export class HttpClient {
     const cached = this.cache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
       this.logger?.('Cache hit', { url });
-      return cached.data as T;
+      return structuredClone(cached.data) as T;
     }
 
     const result = await this.request<T>('GET', url, undefined, options);
 
     this.cache.set(cacheKey, {
-      data: result,
+      data: structuredClone(result),
       expiresAt: Date.now() + this.cacheTtlMs,
     });
 
@@ -193,9 +195,17 @@ export class HttpClient {
         const response = await fetch(url, init);
 
         if (response.status === 429) {
-          const retryAfter = response.headers.get('Retry-After');
-          const waitMs = retryAfter ? parseInt(retryAfter, 10) * 1000 : 1000;
-          this.logger?.('Rate limited, waiting', { waitMs });
+          if (attempt >= this.maxRetries) {
+            const responseBody = await this.safeParseJson(response);
+            throw new BsaleApiError(
+              `Bsale API rate limit exceeded after ${this.maxRetries} retries`,
+              429,
+              responseBody,
+              url,
+            );
+          }
+          const waitMs = this.parseRetryAfter(response.headers.get('Retry-After'));
+          this.logger?.('Rate limited, waiting', { waitMs, attempt });
           await this.sleep(waitMs);
           continue;
         }
@@ -249,10 +259,33 @@ export class HttpClient {
   }
 
   private invalidateCacheByPath(path: string): void {
-    const match = path.match(/\/?([a-z_]+)/);
-    if (match) {
-      this.invalidateCache(match[1]);
+    const withoutVersion = path.replace(/^\/?(v\d+\/)?/, '');
+    const withoutQuery = withoutVersion.split('?')[0];
+    const withoutJson = withoutQuery.replace(/\.json$/, '');
+    const segments = withoutJson.split('/').filter((s) => s && !/^\d+$/.test(s));
+
+    for (const segment of segments) {
+      this.invalidateCache(segment);
     }
+  }
+
+  private parseRetryAfter(headerValue: string | null): number {
+    if (!headerValue) return DEFAULT_RETRY_AFTER_MS;
+    const trimmed = headerValue.trim();
+    if (!trimmed) return DEFAULT_RETRY_AFTER_MS;
+
+    if (/^\d+$/.test(trimmed)) {
+      const seconds = parseInt(trimmed, 10);
+      return Math.min(seconds * 1000, MAX_RETRY_AFTER_MS);
+    }
+
+    const dateMs = Date.parse(trimmed);
+    if (Number.isFinite(dateMs)) {
+      const delta = dateMs - Date.now();
+      return Math.max(0, Math.min(delta, MAX_RETRY_AFTER_MS));
+    }
+
+    return DEFAULT_RETRY_AFTER_MS;
   }
 
   private async safeParseJson(response: Response): Promise<unknown> {
