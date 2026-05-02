@@ -534,4 +534,205 @@ describe('HttpClient', () => {
       expect(mockFetch).toHaveBeenCalledTimes(2);
     });
   });
+
+  describe('AbortSignal', () => {
+    it('throws immediately if the signal is already aborted', async () => {
+      const ac = new AbortController();
+      ac.abort();
+
+      await expect(
+        client.get('/products.json', undefined, { signal: ac.signal }),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('aborts the underlying fetch and does not retry on user abort', async () => {
+      const noRetryClient = new HttpClient({
+        accessToken: 'tk',
+        baseUrl: 'https://api.bsale.io/v1',
+        maxRetries: 3,
+      });
+
+      mockFetch.mockImplementationOnce(
+        (_url, init: RequestInit) =>
+          new Promise<Response>((_, reject) => {
+            (init.signal as AbortSignal).addEventListener('abort', () => {
+              const err = new Error('aborted');
+              err.name = 'AbortError';
+              reject(err);
+            });
+          }),
+      );
+
+      const ac = new AbortController();
+      const promise = noRetryClient.get('/products.json', undefined, { signal: ac.signal });
+
+      await new Promise((r) => setTimeout(r, 10));
+      ac.abort();
+
+      await expect(promise).rejects.toMatchObject({ name: 'AbortError' });
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('still applies timeout when no user signal is provided', async () => {
+      const fastTimeoutClient = new HttpClient({
+        accessToken: 'tk',
+        baseUrl: 'https://api.bsale.io/v1',
+        timeout: 50,
+        maxRetries: 0,
+      });
+
+      mockFetch.mockImplementationOnce(
+        (_url, init: RequestInit) =>
+          new Promise<Response>((_, reject) => {
+            (init.signal as AbortSignal).addEventListener('abort', () => {
+              const err = new Error('aborted');
+              err.name = 'AbortError';
+              reject(err);
+            });
+          }),
+      );
+
+      await expect(fastTimeoutClient.get('/products.json')).rejects.toThrow(/timed out/);
+    });
+
+    it('lets a coalesced caller bail without cancelling the shared fetch', async () => {
+      let resolveFetch: ((value: Response) => void) | undefined;
+      mockFetch.mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveFetch = resolve;
+          }),
+      );
+
+      const firstCaller = client.get('/products.json');
+      const ac = new AbortController();
+      const dedupedCaller = client.get('/products.json', undefined, { signal: ac.signal });
+
+      ac.abort();
+
+      await expect(dedupedCaller).rejects.toMatchObject({ name: 'AbortError' });
+
+      resolveFetch?.(jsonResponse({ items: [{ id: 1 }] }));
+      const result = await firstCaller;
+      expect(result).toEqual({ items: [{ id: 1 }] });
+      expect(mockFetch).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('skipCache', () => {
+    it('bypasses cache hits when skipCache=true', async () => {
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse({ items: [{ id: 1 }] }))
+        .mockResolvedValueOnce(jsonResponse({ items: [{ id: 2 }] }));
+
+      await client.get('/products.json');
+      const fresh = await client.get('/products.json', undefined, { skipCache: true });
+
+      expect(fresh).toEqual({ items: [{ id: 2 }] });
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not write to cache when skipCache=true', async () => {
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse({ items: [{ id: 1 }] }))
+        .mockResolvedValueOnce(jsonResponse({ items: [{ id: 2 }] }));
+
+      await client.get('/products.json', undefined, { skipCache: true });
+      const second = await client.get('/products.json');
+
+      expect(second).toEqual({ items: [{ id: 2 }] });
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not coalesce when skipCache=true', async () => {
+      let resolveA: ((value: Response) => void) | undefined;
+      let resolveB: ((value: Response) => void) | undefined;
+      mockFetch
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((r) => {
+              resolveA = r;
+            }),
+        )
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((r) => {
+              resolveB = r;
+            }),
+        );
+
+      const a = client.get('/products.json', undefined, { skipCache: true });
+      const b = client.get('/products.json', undefined, { skipCache: true });
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+
+      resolveA?.(jsonResponse({ id: 'a' }));
+      resolveB?.(jsonResponse({ id: 'b' }));
+
+      const [ra, rb] = await Promise.all([a, b]);
+      expect(ra).toEqual({ id: 'a' });
+      expect(rb).toEqual({ id: 'b' });
+    });
+  });
+
+  describe('per-resource TTL', () => {
+    it('uses cacheTtlByResource when path matches, falls back otherwise', async () => {
+      vi.useFakeTimers();
+      try {
+        const ttlClient = new HttpClient({
+          accessToken: 'tk',
+          baseUrl: 'https://api.bsale.io/v1',
+          cacheTtlMs: 60_000,
+          cacheTtlByResource: { stocks: 100 },
+          maxRetries: 0,
+        });
+
+        mockFetch
+          .mockResolvedValueOnce(jsonResponse({ items: [{ id: 1 }] }))
+          .mockResolvedValueOnce(jsonResponse({ items: [{ id: 1 }] }))
+          .mockResolvedValueOnce(jsonResponse({ items: [{ id: 'p' }] }));
+
+        await ttlClient.get('/stocks.json');
+        await vi.advanceTimersByTimeAsync(150);
+        await ttlClient.get('/stocks.json');
+
+        expect(mockFetch).toHaveBeenCalledTimes(2);
+
+        await ttlClient.get('/products.json');
+        await vi.advanceTimersByTimeAsync(150);
+        await ttlClient.get('/products.json');
+
+        expect(mockFetch).toHaveBeenCalledTimes(3);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('matches the first segment, ignoring version prefix', async () => {
+      vi.useFakeTimers();
+      try {
+        const ttlClient = new HttpClient({
+          accessToken: 'tk',
+          baseUrl: 'https://api.bsale.io/v1',
+          cacheTtlMs: 60_000,
+          cacheTtlByResource: { products: 100 },
+          maxRetries: 0,
+        });
+
+        mockFetch
+          .mockResolvedValueOnce(jsonResponse({ id: 1 }))
+          .mockResolvedValueOnce(jsonResponse({ id: 2 }));
+
+        await ttlClient.get('/v2/products/pack.json');
+        await vi.advanceTimersByTimeAsync(150);
+        await ttlClient.get('/v2/products/pack.json');
+
+        expect(mockFetch).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
 });

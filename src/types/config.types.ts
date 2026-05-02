@@ -40,6 +40,11 @@ export interface BsaleConfig {
    * se descarta la entrada accedida menos recientemente.
    */
   readonly cacheMaxEntries?: number;
+  /**
+   * TTL por recurso (en ms) que sobrescribe `cacheTtlMs` para los paths cuyo
+   * primer segmento coincida con la key. Ej. `{ stocks: 5_000, document_types: 3_600_000 }`.
+   */
+  readonly cacheTtlByResource?: Readonly<Record<string, number>>;
   /** Optional logger callback for request/response logging */
   readonly logger?: (message: string, data?: Record<string, unknown>) => void;
 }

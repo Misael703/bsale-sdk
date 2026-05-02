@@ -27,4 +27,8 @@ export interface BsalePaginateOptions {
   readonly maxItems?: number;
   /** Items per page (default: 50, max: 50) */
   readonly pageSize?: number;
+  /** Allows cancelling the long-running pagination loop. */
+  readonly signal?: AbortSignal;
+  /** Bypass cache for every page request. */
+  readonly skipCache?: boolean;
 }

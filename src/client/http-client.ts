@@ -14,6 +14,18 @@ export interface HttpRequestOptions {
    * la credencial va en el path (ej. pasarela de pagos `bcash.bsale.io`).
    */
   readonly skipAuth?: boolean;
+  /**
+   * Si es true, ignora el cache y el in-flight dedup: dispara fetch fresh y no
+   * persiste la respuesta. Útil para forzar lectura tras una operación externa.
+   */
+  readonly skipCache?: boolean;
+  /**
+   * Permite cancelar la request. Si el caller que origina la fetch aborta,
+   * la fetch subyacente se cancela y los callers dedupplicados ven el error.
+   * Si un caller dedupplicado aborta, sólo bailas su propio await; la fetch
+   * compartida sigue para el resto.
+   */
+  readonly signal?: AbortSignal;
 }
 
 const DEFAULT_BASE_URL = 'https://api.bsale.io/v1';
@@ -38,6 +50,7 @@ export class HttpClient {
   private readonly timeout: number;
   private readonly maxRetries: number;
   private readonly cacheTtlMs: number;
+  private readonly cacheTtlByResource?: Readonly<Record<string, number>>;
   private readonly logger?: (message: string, data?: Record<string, unknown>) => void;
   private readonly cache: LRUCache<CacheEntry>;
   private readonly inFlight = new Map<string, Promise<unknown>>();
@@ -48,6 +61,7 @@ export class HttpClient {
     this.timeout = config.timeout ?? DEFAULT_TIMEOUT;
     this.maxRetries = config.maxRetries ?? DEFAULT_MAX_RETRIES;
     this.cacheTtlMs = config.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
+    this.cacheTtlByResource = config.cacheTtlByResource;
     this.cache = new LRUCache<CacheEntry>(config.cacheMaxEntries ?? DEFAULT_CACHE_MAX_ENTRIES);
     this.logger = config.logger;
   }
@@ -66,17 +80,25 @@ export class HttpClient {
     const url = this.buildUrl(path, params);
     const cacheKey = url;
 
-    const cached = this.cache.get(cacheKey);
-    if (cached && cached.expiresAt > Date.now()) {
-      this.logger?.('Cache hit', { url });
-      return structuredClone(cached.data) as T;
+    const skipCache = options?.skipCache ?? false;
+
+    if (!skipCache) {
+      const cached = this.cache.get(cacheKey);
+      if (cached && cached.expiresAt > Date.now()) {
+        this.logger?.('Cache hit', { url });
+        return structuredClone(cached.data) as T;
+      }
+
+      const inflight = this.inFlight.get(cacheKey);
+      if (inflight) {
+        this.logger?.('Coalesced request', { url });
+        const shared = await this.awaitWithSignal(inflight, options?.signal);
+        return structuredClone(shared) as T;
+      }
     }
 
-    const inflight = this.inFlight.get(cacheKey);
-    if (inflight) {
-      this.logger?.('Coalesced request', { url });
-      const shared = await inflight;
-      return structuredClone(shared) as T;
+    if (skipCache) {
+      return this.request<T>('GET', url, undefined, options);
     }
 
     const sharedPromise = this.request<T>('GET', url, undefined, options).then((data) =>
@@ -88,7 +110,7 @@ export class HttpClient {
       const shared = await sharedPromise;
       this.cache.set(cacheKey, {
         data: shared,
-        expiresAt: Date.now() + this.cacheTtlMs,
+        expiresAt: Date.now() + this.resolveTtl(path),
       });
       return structuredClone(shared) as T;
     } finally {
@@ -185,10 +207,19 @@ export class HttpClient {
     options?: HttpRequestOptions,
   ): Promise<T> {
     let lastError: Error | undefined;
+    const userSignal = options?.signal;
+
+    if (userSignal?.aborted) {
+      throw this.makeAbortError(userSignal);
+    }
 
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+      const onUserAbort = (): void => controller.abort();
+      if (userSignal) {
+        userSignal.addEventListener('abort', onUserAbort, { once: true });
+      }
 
       try {
         this.logger?.(`${method} ${url}`, { attempt });
@@ -256,6 +287,10 @@ export class HttpClient {
           throw error;
         }
 
+        if (userSignal?.aborted) {
+          throw this.makeAbortError(userSignal);
+        }
+
         lastError = error as Error;
 
         if ((error as Error).name === 'AbortError') {
@@ -270,6 +305,9 @@ export class HttpClient {
         }
       } finally {
         clearTimeout(timeoutId);
+        if (userSignal) {
+          userSignal.removeEventListener('abort', onUserAbort);
+        }
       }
     }
 
@@ -277,14 +315,55 @@ export class HttpClient {
   }
 
   private invalidateCacheByPath(path: string): void {
+    for (const segment of this.extractResourceSegments(path)) {
+      this.invalidateCache(segment);
+    }
+  }
+
+  private extractResourceSegments(path: string): string[] {
     const withoutVersion = path.replace(/^\/?(v\d+\/)?/, '');
     const withoutQuery = withoutVersion.split('?')[0];
     const withoutJson = withoutQuery.replace(/\.json$/, '');
-    const segments = withoutJson.split('/').filter((s) => s && !/^\d+$/.test(s));
+    return withoutJson.split('/').filter((s) => s && !/^\d+$/.test(s));
+  }
 
-    for (const segment of segments) {
-      this.invalidateCache(segment);
+  private resolveTtl(path: string): number {
+    if (!this.cacheTtlByResource) return this.cacheTtlMs;
+    const [resource] = this.extractResourceSegments(path);
+    if (resource && resource in this.cacheTtlByResource) {
+      return this.cacheTtlByResource[resource];
     }
+    return this.cacheTtlMs;
+  }
+
+  private makeAbortError(signal: AbortSignal): Error {
+    if (signal.reason instanceof Error) return signal.reason;
+    const err = new Error('Request aborted');
+    err.name = 'AbortError';
+    return err;
+  }
+
+  private awaitWithSignal<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+    if (!signal) return promise;
+    if (signal.aborted) return Promise.reject(this.makeAbortError(signal));
+
+    return new Promise<T>((resolve, reject) => {
+      const onAbort = (): void => {
+        signal.removeEventListener('abort', onAbort);
+        reject(this.makeAbortError(signal));
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+      promise.then(
+        (value) => {
+          signal.removeEventListener('abort', onAbort);
+          resolve(value);
+        },
+        (err) => {
+          signal.removeEventListener('abort', onAbort);
+          reject(err);
+        },
+      );
+    });
   }
 
   private parseRetryAfter(headerValue: string | null): number {
