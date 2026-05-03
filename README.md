@@ -5,7 +5,10 @@ SDK en TypeScript para la API REST de [Bsale](https://www.bsale.cl) — versión
 - **35 recursos** cubriendo el 100% de la documentación oficial.
 - **Zero dependencies** en runtime — solo `fetch` nativo de Node 20+.
 - **5 hosts** y **3 versiones** (v1/v2/v3) manejados internamente.
-- Cache en memoria, retry con backoff, manejo de rate-limit.
+- **Cache LRU + request coalescing** automáticos; TTL por recurso configurable.
+- **`AbortSignal`**, idempotency keys, async iterators y middleware Koa-style.
+- Retry con backoff exponencial, parser robusto de `Retry-After` (incluye HTTP-date).
+- `BsaleApiError` enriquecido — parsea `code`, `details` y `message` del body.
 - Webhooks con tipos discriminados por `topic`.
 
 > Solo Chile (`api.bsale.io`). Perú y México fuera del alcance del SDK.
@@ -69,6 +72,18 @@ const bsale = new BsaleClient({
 
   // Opcional — TTL del cache en memoria (ms). Default 60000.
   cacheTtlMs: 60000,
+
+  // Opcional — máximo de entradas en el cache LRU. Default 1000.
+  cacheMaxEntries: 1000,
+
+  // Opcional — TTL por recurso (ms) que sobrescribe `cacheTtlMs`.
+  cacheTtlByResource: {
+    stocks: 5_000,           // alta volatilidad → TTL corto
+    document_types: 3_600_000, // catálogo casi-estático → TTL largo
+  },
+
+  // Opcional — middlewares estilo Koa (ver sección Middleware).
+  middlewares: [],
 
   // Opcional — logger para request/response.
   logger: (message, data) => console.log(`[bsale] ${message}`, data),
@@ -557,14 +572,181 @@ await bsale.paymentsGateway.reportSuccess('py-token', {
 
 ## Cache
 
-El cliente cachea respuestas GET en memoria. Las operaciones de escritura invalidan el cache del recurso afectado automáticamente.
+El cliente cachea respuestas GET en memoria con **LRU** (default 1000 entradas, configurable con `cacheMaxEntries`). Las operaciones de escritura invalidan el cache del recurso afectado y de sus sub-recursos automáticamente.
 
 ```typescript
-bsale.clearCache();              // todos los hosts
-bsale.clearResourceCache('products'); // un recurso en todos los hosts
+bsale.clearCache();                    // todos los hosts
+bsale.clearResourceCache('products');  // un recurso en todos los hosts
 ```
 
-El TTL por default es 60 segundos (`cacheTtlMs`).
+El TTL por default es 60 segundos (`cacheTtlMs`). Se puede afinar por recurso con `cacheTtlByResource` (ver sección Configuración).
+
+### Request coalescing
+
+Múltiples GETs idénticos disparados en paralelo se colapsan en una sola fetch real. Cada caller recibe su propia copia (clonada) del payload, así mutaciones nunca contaminan a otros.
+
+```typescript
+// Estos 3 awaits comparten una sola fetch al server.
+const [a, b, c] = await Promise.all([
+  bsale.products.list({ state: 0 }),
+  bsale.products.list({ state: 0 }),
+  bsale.products.list({ state: 0 }),
+]);
+```
+
+### Bypass del cache
+
+Para forzar lectura fresh (ej. tras una operación externa) sin invalidar la entrada cacheada:
+
+```typescript
+const fresh = await bsale.products.list({ state: 0 }, { skipCache: true });
+```
+
+`skipCache: true` también desactiva el coalescing — útil si necesitas N requests independientes idénticas.
+
+### Webhooks → invalidación selectiva
+
+```typescript
+app.post('/webhooks/bsale', (req, res) => {
+  bsale.handleWebhook(req.body); // invalida cache del recurso afectado
+  res.sendStatus(200);
+});
+```
+
+---
+
+## Cancelación con `AbortSignal`
+
+Cualquier request acepta un `signal` para cancelarse. Si se aborta, el SDK no reintenta.
+
+```typescript
+const controller = new AbortController();
+setTimeout(() => controller.abort(), 5_000);
+
+try {
+  const docs = await bsale.documents.listAll(
+    { emissiondaterange: '[1700000000,1702592000]' },
+    { signal: controller.signal },
+  );
+} catch (err) {
+  if ((err as Error).name === 'AbortError') {
+    console.log('Cancelado por timeout del usuario');
+  }
+}
+```
+
+`listAll()` chequea la signal entre páginas; `iterate()` también respeta cancelación.
+
+> Comportamiento con coalescing: si dos callers comparten una fetch, abortar el caller que la originó cancela la fetch real y los demás reciben el error. Un caller que se sumó a una fetch en curso puede abortar su propio await sin afectar al resto — la fetch sigue para los otros.
+
+---
+
+## Iterar grandes datasets — `iterate()`
+
+Async iterator memoria-eficiente: emite items uno a uno y pagina bajo demanda. Si el consumer hace `break` o filtra suficientes items, no se pide la próxima página.
+
+```typescript
+for await (const doc of bsale.documents.iterate({
+  emissiondaterange: '[1700000000,1702592000]',
+})) {
+  if (doc.totalAmount > 1_000_000) {
+    console.log('Documento grande:', doc.id);
+    break; // no carga páginas siguientes
+  }
+}
+```
+
+Soporta `maxItems`, `pageSize`, `signal` y `skipCache`.
+
+---
+
+## Idempotency keys
+
+POST/PUT pueden enviar `Idempotency-Key`, preservado en cada retry interno. Protege contra duplicados de red cuando Bsale soporte el header (recomendado para emisión de documentos):
+
+```typescript
+import { randomUUID } from 'node:crypto';
+
+const opKey = randomUUID();
+
+const doc = await bsale.documents.create(
+  { /* payload */ },
+  { idempotencyKey: opKey },
+);
+```
+
+Si la red corta entre el request y la respuesta, el SDK reintenta con la **misma** key, y el server devuelve la misma boleta en lugar de emitir una segunda.
+
+> Nota: actualmente sólo se aplica si pasas `requestOptions` directamente a `http.post/put`. Las firmas de los métodos custom de los recursos (`documents.create`, etc.) no la exponen aún — se llega vía `client.documents.http.post(path, body, { idempotencyKey })` o, próximamente, como tercer argumento del helper.
+
+---
+
+## Middleware
+
+Middlewares estilo Koa wrappean cada fetch. Útil para tracing, métricas, refresh de tokens, o lógica custom de retry:
+
+```typescript
+import { BsaleClient, BsaleMiddleware } from '@misael703/bsale-sdk';
+
+const tracing: BsaleMiddleware = async (ctx, next) => {
+  const span = startSpan(`bsale ${ctx.method} ${ctx.url}`);
+  try {
+    const res = await next();
+    span.setStatus(res.status);
+    return res;
+  } finally {
+    span.end();
+  }
+};
+
+const stamp: BsaleMiddleware = async (ctx, next) => {
+  ctx.headers['X-Trace-Id'] = generateTraceId();
+  return next();
+};
+
+const bsale = new BsaleClient({
+  accessToken: process.env.BSALE_TOKEN!,
+  middlewares: [tracing, stamp],
+});
+
+// O en runtime:
+bsale.use(async (ctx, next) => {
+  console.log('attempt', ctx.attempt, ctx.method, ctx.url);
+  return next();
+});
+```
+
+`BsaleClient.use()` aplica el middleware a los 5 hosts internos. El `ctx` expone `url`, `method`, `headers` (mutable), `body`, `attempt` (número de intento, 0 = primero), `signal`. Un middleware puede llamar `next()` cero veces (cortocircuito con response sintética) o varias veces (retry custom).
+
+---
+
+## Errores — `BsaleApiError`
+
+Todas las respuestas no-OK lanzan `BsaleApiError` con el body parseado:
+
+```typescript
+import { BsaleApiError } from '@misael703/bsale-sdk';
+
+try {
+  await bsale.documents.create({ /* ... */ });
+} catch (err) {
+  if (err instanceof BsaleApiError) {
+    console.log(err.status);       // 400, 404, 429, 500...
+    console.log(err.code);          // string parseado de body.code/error_code
+    console.log(err.details);       // body.details / body.errors / body.fields
+    console.log(err.message);       // mensaje base + body.message si lo hay
+    console.log(err.path);          // URL que falló
+    console.log(err.responseBody);  // raw body, por si necesitas más
+
+    if (err.isRateLimit) /* 429 */;
+    if (err.isNotFound) /* 404 */;
+    if (err.isClientError) /* 4xx ≠ 429 */;
+    if (err.isServerError) /* 5xx */;
+  }
+}
+```
+
+Cuando se agotan los reintentos por 429, el SDK lanza `BsaleApiError(429)` con el último body recibido — no un `Error` genérico.
 
 ---
 
@@ -637,6 +819,28 @@ El SDK respeta literalmente las quirks de la API:
 - Tipos mixtos en responses: `payment.amount`, `payment.recordDate`, `tax.percentage` (vienen como `string` o `number` según endpoint).
 - `coupons.disabled` (no `state`).
 - `shippingTypes.codeSii` es `int`, mientras `documentTypes.codeSii` es `string`.
+
+---
+
+## Migración v0.2.0 → v0.3.0
+
+**Sin breaking changes**. Todas las features nuevas son additive y opt-in:
+
+- `cacheMaxEntries` (LRU) — default 1000, sólo importa si tu proceso de larga vida tenía leak silente.
+- `cacheTtlByResource` — opcional; si no lo seteás, sigue usando `cacheTtlMs`.
+- Request coalescing — automático y transparente. Si tu código asumía que cada GET hacía una fetch real (poco probable), ahora múltiples GETs idénticos en paralelo comparten una sola request.
+- `AbortSignal`, `skipCache`, `idempotencyKey` — opt-in via `HttpRequestOptions`.
+- `BaseResource.iterate()` — método nuevo, los existentes (`list`, `listAll`, `getById`, `count`) intactos.
+- Middleware — opt-in via `middlewares` config o `client.use()`.
+- `BsaleApiError` — campos `code` / `details` / `isClientError` agregados; los existentes (`status`, `path`, `responseBody`, `isRateLimit`, `isServerError`, `isNotFound`) intactos. El `message` ahora puede incluir el detalle del backend (ej. `"Bsale API error: 400 — Cliente no encontrado"`); si tu código matcheaba el `message` exacto, revisá.
+
+### Bug fixes incluidos
+
+- 429 con retries agotados ahora lanza `BsaleApiError(429)` (antes `Error` genérico).
+- `Retry-After` malformado ya no causa loops agresivos (antes `parseInt` daba `NaN` y `setTimeout(NaN)` reintentaba inmediato). Soporta HTTP-date y aplica cap de 60s.
+- POST a `/v2/products/pack.json` ya no borra todo el cache (antes la regex de invalidación capturaba `"v"` y matcheaba todas las URLs con `v1`).
+- POST a sub-recurso (ej. `/products/123/variants.json`) invalida tanto `products` como `variants` (antes sólo `products`).
+- Cache devuelve clones (`structuredClone`) — mutar el resultado ya no envenena lecturas siguientes.
 
 ---
 
