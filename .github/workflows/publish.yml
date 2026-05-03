@@ -1,0 +1,57 @@
+name: Publish to npm
+
+# Triggers on pushes of version tags (e.g. v0.3.0).
+# Recommended flow:
+#   pnpm version minor          # bumps package.json and creates the tag
+#   git push --follow-tags      # pushes the tag, this workflow runs
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: 'https://registry.npmjs.org'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Publish to npm with provenance
+        env:
+          # setup-node escribe un .npmrc con `_authToken=${NODE_AUTH_TOKEN}` y
+          # setea NODE_AUTH_TOKEN como env var. Cuando npm CLI ve un token
+          # configurado (incluso vacío/inválido) usa token-auth y nunca dispara
+          # el flow OIDC del Trusted Publisher. Limpiamos ambos para forzar
+          # OIDC. El OIDC automático requiere npm >= 11.5.1; Node 20 LTS
+          # bundlea npm 10, así que instalamos npm latest antes de publicar.
+          NPM_CONFIG_USERCONFIG: ''
+          NODE_AUTH_TOKEN: ''
+        run: |
+          npm install -g npm@latest
+          echo "npm version: $(npm --version)"
+          npm publish --provenance --access public
