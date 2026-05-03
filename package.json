@@ -1,6 +1,6 @@
 {
   "name": "@misael703/bsale-sdk",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "TypeScript SDK for the Bsale REST API (Chile). 35 resources, 5 hosts, zero runtime dependencies.",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -32,6 +32,14 @@
     "prepublishOnly": "pnpm build"
   },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Misael703/bsale-sdk.git"
+  },
+  "homepage": "https://github.com/Misael703/bsale-sdk#readme",
+  "bugs": {
+    "url": "https://github.com/Misael703/bsale-sdk/issues"
+  },
   "engines": {
     "node": ">=20"
   },
