@@ -41,20 +41,13 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Debug OIDC claims (temporary)
-        run: |
-          set -e
-          AUDIENCE="npm:registry.npmjs.org"
-          TOKEN_RESPONSE=$(curl -sS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${AUDIENCE}")
-          TOKEN=$(echo "${TOKEN_RESPONSE}" | jq -r .value)
-          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
-            echo "::error::Failed to get OIDC token. Response: ${TOKEN_RESPONSE}"
-            exit 1
-          fi
-          PAYLOAD=$(echo "$TOKEN" | cut -d. -f2)
-          while [ $((${#PAYLOAD} % 4)) -ne 0 ]; do PAYLOAD="${PAYLOAD}="; done
-          echo "OIDC token claims sent to npm:"
-          echo "$PAYLOAD" | tr '_-' '/+' | base64 -d | jq .
-
       - name: Publish to npm with provenance
+        env:
+          # setup-node escribe un .npmrc con `_authToken=${NODE_AUTH_TOKEN}` y
+          # setea NODE_AUTH_TOKEN como env var. Cuando npm CLI ve un token
+          # configurado (incluso vacío/inválido) usa token-auth y nunca dispara
+          # el flow OIDC del Trusted Publisher. Limpiamos ambos para forzar
+          # OIDC.
+          NPM_CONFIG_USERCONFIG: ''
+          NODE_AUTH_TOKEN: ''
         run: npm publish --provenance --access public
