@@ -47,7 +47,11 @@ jobs:
           # setea NODE_AUTH_TOKEN como env var. Cuando npm CLI ve un token
           # configurado (incluso vacío/inválido) usa token-auth y nunca dispara
           # el flow OIDC del Trusted Publisher. Limpiamos ambos para forzar
-          # OIDC.
+          # OIDC. El OIDC automático requiere npm >= 11.5.1; Node 20 LTS
+          # bundlea npm 10, así que instalamos npm latest antes de publicar.
           NPM_CONFIG_USERCONFIG: ''
           NODE_AUTH_TOKEN: ''
-        run: npm publish --provenance --access public
+        run: |
+          npm install -g npm@latest
+          echo "npm version: $(npm --version)"
+          npm publish --provenance --access public
