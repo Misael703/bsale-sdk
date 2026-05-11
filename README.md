@@ -819,6 +819,98 @@ El SDK respeta literalmente las quirks de la API:
 - Tipos mixtos en responses: `payment.amount`, `payment.recordDate`, `tax.percentage` (vienen como `string` o `number` según endpoint).
 - `coupons.disabled` (no `state`).
 - `shippingTypes.codeSii` es `int`, mientras `documentTypes.codeSii` es `string`.
+- **Paginación profunda con `expand` truncada a 25 items** — limitación silenciosa de la API. Ver sección dedicada abajo.
+
+---
+
+## Paginación profunda con `expand` (limitación de la API)
+
+La API de Bsale **no pagina los sub-recursos expandidos junto con el padre**. Cuando usas `?expand=<sub>` en un listado, cada item padre embebe el sub-recurso como un objeto con su propia paginación interna (`{ count, limit, offset, items[] }`), y aplica un **límite implícito de 25 items** sobre ese sub-recurso — independientemente del `limit` que pases en el request padre (que sólo afecta al listado de primer nivel).
+
+Si el sub-recurso supera 25 items, **vienen truncados silenciosamente**. No hay error, no hay warning, y no existe sintaxis para sobreescribir el límite (no soporta `expand=details(limit:50)` ni equivalente).
+
+### Detección
+
+Como el sub-recurso embebido tiene la misma forma que `BsaleListResponse<T>`, puedes detectar la truncación comparando `count` vs `items.length`:
+
+```typescript
+const page = await bsale.documents.list({ limit: 50, expand: 'details' });
+
+for (const doc of page.items) {
+  const sub = (doc as any).details;
+  if (sub?.count > sub?.items.length) {
+    // Hay más detalles que los retornados — fetch dedicado al endpoint del sub-recurso
+    const fullDetails = await bsale.documents.getDetails(doc.id, { limit: 50 });
+  }
+}
+```
+
+### Recomendación
+
+- Usa `expand` sólo cuando **garantices** que el sub-recurso cabe en el límite implícito (relaciones 1:1 como `client` o `office` en un documento).
+- Para sub-recursos potencialmente grandes (`details`, `references`, `document_taxes`, `sellers`, `attributes`), haz un segundo fetch explícito al endpoint dedicado (`/documents/{id}/details.json`, etc.) y pagínalo normalmente (máx. 50 por página).
+- Asume que `expand` miente cuando trabajes con documentos B2B / mayoristas o cualquier dataset donde la cardinalidad del sub-recurso pueda crecer.
+
+### Por qué importa para ELT / data warehouse
+
+Si tu fact table tiene grano de línea de documento (una fila por `document_detail`), depender de `expand=details` introduce un sesgo **no aleatorio**: afecta más a los documentos grandes, que suelen ser los analíticamente más relevantes. Para pipelines de extracción, usa siempre el endpoint dedicado del sub-recurso y acepta el costo N+1 a cambio de completitud.
+
+---
+
+## Documento + detalles en un paso — `getWithDetails()`
+
+`DocumentsResource.getWithDetails(id)` resuelve el patrón "consultar un documento y luego sus líneas" minimizando requests. Internamente:
+
+1. Hace **un solo request** con `expand=details` — trae el documento y los primeros 25 detalles embebidos en la misma respuesta.
+2. Si `count <= 25`, retorna directo. **No dispara un segundo request.**
+3. Si `count > 25`, pagina el resto contra `/documents/{id}/details.json` con `limit=50`, partiendo en `offset=25`.
+
+```typescript
+const { document, details } = await bsale.documents.getWithDetails(824738);
+// document.id, document.totalAmount, …
+// details: BsaleDocumentDetailItem[] completo, sin truncación
+```
+
+### Costo en requests
+
+| Líneas del documento | Sin helper (getById + paginar) | Con `getWithDetails` |
+|---|---|---|
+| ≤ 25 | 2 | **1** |
+| 26–75 | 2 | 2 |
+| 76–125 | 3 | 3 |
+| N | `1 + ⌈N/50⌉` | `1 + ⌈(N-25)/50⌉` |
+
+El ahorro se concentra en docs ≤ 25 líneas (la mayoría del volumen típico). Para docs grandes empata, pero **te trae `user`, `client`, `office`, etc. gratis en la misma llamada** si los pasas en `options.expand`.
+
+### Expand adicional
+
+`details` siempre se incluye. Para sumar otros, pasa `expand` como array:
+
+```typescript
+const { document, details } = await bsale.documents.getWithDetails(824738, {
+  expand: ['user', 'client'],
+  signal: ac.signal,
+  skipCache: true,
+});
+// document.user, document.client vienen poblados sin requests extra
+```
+
+`signal` y `skipCache` se propagan a todas las llamadas internas.
+
+### Helper genérico debajo — `paginateSubresource()`
+
+`getWithDetails` usa `BaseResource.paginateSubresource<U>()` por debajo. Es un método `protected` reutilizable para paginar cualquier sub-recurso (incluyendo casos donde tienes la primera página ya embebida del `expand`). Se irá exponiendo en próximas versiones a través de helpers tipo `getAllReferences`, `getAllTaxes`, etc.
+
+---
+
+## Migración v0.3.0 → v0.4.0
+
+**Sin breaking changes**. Features additive:
+
+- `DocumentsResource.getWithDetails(id, options?)` — método nuevo. Encapsula el patrón "documento + todas las líneas" con optimización de requests vía `expand=details` embebido. Acepta `expand`, `signal`, `skipCache`.
+- `BaseResource.paginateSubresource()` — helper `protected` para paginar sub-recursos arbitrarios. Acepta una primera página ya fetcheada (`embedded`) para evitar requests redundantes. Pensado para los `getAll*` que vienen en próximas versiones.
+
+Si dependes del shape exacto del response de `getById(id, { expand: 'details' })` y lo estabas casteando para acceder a `details.items`, sigue funcionando — el nuevo helper no cambia el comportamiento del HTTP client. El método existente sigue intacto.
 
 ---
 

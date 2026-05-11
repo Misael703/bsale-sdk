@@ -125,4 +125,72 @@ export abstract class BaseResource<T> {
   ): Promise<{ count: number }> {
     return this.http.get<{ count: number }>(`/${this.path}/count.json`, params, requestOptions);
   }
+
+  /**
+   * Pagina cualquier sub-recurso (`/documents/{id}/details.json`, etc.) hasta agotar
+   * sus items. Acepta una primera página ya fetcheada (típicamente la embebida vía
+   * `expand=<sub>`) para evitar un request inicial redundante.
+   *
+   * El endpoint dedicado de sub-recurso respeta `limit` hasta 50 (a diferencia del
+   * embebido del `expand`, que fuerza 25 silenciosamente).
+   *
+   * @param path - Path absoluto del sub-recurso (ej. `/documents/824738/details.json`).
+   * @param options.params - Query params adicionales.
+   * @param options.embedded - Primera página ya fetcheada (ahorra 1 request si `count` ya cubre).
+   * @param options.pageSize - Tamaño de página para el loop (default 50).
+   * @param options.signal - AbortSignal para cancelar entre páginas.
+   * @param options.skipCache - Bypass de cache en cada página.
+   */
+  protected async paginateSubresource<U>(
+    path: string,
+    options?: {
+      readonly params?: BsaleQueryParams;
+      readonly embedded?: BsaleListResponse<U>;
+      readonly pageSize?: number;
+      readonly signal?: AbortSignal;
+      readonly skipCache?: boolean;
+    },
+  ): Promise<U[]> {
+    const pageSize = Math.min(options?.pageSize ?? MAX_PAGE_SIZE, MAX_PAGE_SIZE);
+    const all: U[] = [];
+    let offset = 0;
+
+    const requestOptions: HttpRequestOptions | undefined =
+      options?.signal || options?.skipCache
+        ? { signal: options.signal, skipCache: options.skipCache }
+        : undefined;
+
+    if (options?.embedded) {
+      all.push(...options.embedded.items);
+      const total = options.embedded.count;
+      if (all.length >= total) {
+        return all;
+      }
+      offset = all.length;
+    }
+
+    while (true) {
+      if (options?.signal?.aborted) {
+        throw options.signal.reason instanceof Error
+          ? options.signal.reason
+          : Object.assign(new Error('Pagination aborted'), { name: 'AbortError' });
+      }
+
+      const page = await this.http.get<BsaleListResponse<U>>(
+        path,
+        { ...options?.params, limit: pageSize, offset },
+        requestOptions,
+      );
+
+      all.push(...page.items);
+
+      if (!page.next || page.items.length < pageSize) {
+        break;
+      }
+
+      offset += page.items.length;
+    }
+
+    return all;
+  }
 }

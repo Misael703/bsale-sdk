@@ -23,6 +23,57 @@ export class DocumentsResource extends BaseResource<BsaleDocument> {
   }
 
   /**
+   * Documento + todas sus líneas en un solo flujo, optimizado en cantidad de requests:
+   * usa `expand=details` para traer doc + primeros 25 detalles en la misma llamada, y
+   * pagina el resto sólo si el documento tiene más de 25 líneas.
+   *
+   * Costo en requests:
+   * - ≤ 25 líneas → 1 request total.
+   * - N > 25 líneas → `1 + ⌈(N-25)/50⌉` requests.
+   *
+   * @param id - ID del documento.
+   * @param options.expand - Sub-recursos adicionales a expandir (ej. `['user']`).
+   *   `details` siempre se incluye automáticamente.
+   * @param options.signal - AbortSignal propagado a todas las requests.
+   * @param options.skipCache - Bypass de cache.
+   */
+  async getWithDetails(
+    id: number,
+    options?: {
+      readonly expand?: ReadonlyArray<string>;
+      readonly signal?: AbortSignal;
+      readonly skipCache?: boolean;
+    },
+  ): Promise<{ document: BsaleDocument; details: BsaleDocumentDetailItem[] }> {
+    const expandList = ['details', ...(options?.expand ?? [])];
+    const requestOptions =
+      options?.signal || options?.skipCache
+        ? { signal: options.signal, skipCache: options.skipCache }
+        : undefined;
+
+    const document = await this.getById(id, { expand: expandList.join(',') }, requestOptions);
+
+    const raw = document as BsaleDocument & {
+      details?: BsaleListResponse<BsaleDocumentDetailItem> | { href: string };
+    };
+    const embedded =
+      raw.details && 'items' in raw.details
+        ? (raw.details as BsaleListResponse<BsaleDocumentDetailItem>)
+        : undefined;
+
+    const details = await this.paginateSubresource<BsaleDocumentDetailItem>(
+      `/documents/${id}/details.json`,
+      {
+        embedded,
+        signal: options?.signal,
+        skipCache: options?.skipCache,
+      },
+    );
+
+    return { document, details };
+  }
+
+  /**
    * Elimina un documento **no-electrónico**. Requiere `officeId` como query param.
    * Documentos electrónicos no se pueden eliminar via API.
    */
