@@ -1,6 +1,6 @@
 {
   "name": "@misael703/bsale-sdk",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "TypeScript SDK for the Bsale REST API (Chile). 35 resources, 5 hosts, zero runtime dependencies.",
   "type": "module",
   "main": "./dist/index.cjs",
