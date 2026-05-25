@@ -903,6 +903,17 @@ const { document, details } = await bsale.documents.getWithDetails(824738, {
 
 ---
 
+## Migración v0.4.0 → v0.5.0
+
+**Sin breaking changes**. Features additive:
+
+- `ShippingsResource.listByDocument(documentId)` — método nuevo. Lista las guías de despacho asociadas a un documento (boleta/factura) original, encapsulando el filtro `documentid` de la API.
+- `ReturnsResource.listByReferenceDocument(documentId)` — método nuevo. Lista las devoluciones (NC) que referencian a un documento original, encapsulando el filtro `referencedocumentid` de la API.
+
+Ambos son wrappers tipados sobre `list()`; si ya pasabas esos filtros a mano vía `list({ documentid })` / `list({ referencedocumentid })`, sigue funcionando idéntico.
+
+---
+
 ## Migración v0.3.0 → v0.4.0
 
 **Sin breaking changes**. Features additive:

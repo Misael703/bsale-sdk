@@ -46,4 +46,9 @@ export class ReturnsResource extends BaseResource<BsaleReturn> {
       data,
     );
   }
+
+  /** Lista las devoluciones (NC) que referencian a un documento original. */
+  async listByReferenceDocument(documentId: number): Promise<BsaleListResponse<BsaleReturn>> {
+    return this.list({ referencedocumentid: documentId });
+  }
 }
