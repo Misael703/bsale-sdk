@@ -46,4 +46,9 @@ export class ShippingsResource extends BaseResource<BsaleShipping> {
       `/shippings/${shippingId}/details/${detailId}.json`,
     );
   }
+
+  /** Lista las guías de despacho asociadas a un documento (boleta/factura) original. */
+  async listByDocument(documentId: number): Promise<BsaleListResponse<BsaleShipping>> {
+    return this.list({ documentid: documentId });
+  }
 }
