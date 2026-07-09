@@ -1,13 +1,15 @@
 name: Publish to npm
 
-# Triggers on pushes of version tags (e.g. v0.3.0).
+# Triggers when a GitHub Release is published (same pattern as the ui_kit repo).
 # Recommended flow:
-#   pnpm version minor          # bumps package.json and creates the tag
-#   git push --follow-tags      # pushes the tag, this workflow runs
+#   1. bump `version` in package.json, commit + push to main
+#   2. gh release create vX.Y.Z --generate-notes   # creates the tag + release
+# Publishing the release fires this workflow (tests -> build -> npm publish).
+# Unlike a tag-push trigger, the release event reads this YAML from the release
+# target commit (main HEAD), so workflow fixes apply without moving any tag.
 on:
-  push:
-    tags:
-      - 'v*'
+  release:
+    types: [published]
 
 permissions:
   contents: read
