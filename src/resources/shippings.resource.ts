@@ -22,6 +22,61 @@ export class ShippingsResource extends BaseResource<BsaleShipping> {
   }
 
   /**
+   * Despacho + todas sus líneas en un solo flujo, optimizado en cantidad de requests:
+   * usa `expand=details` para traer el despacho + primeros 25 detalles en la misma
+   * llamada, y pagina el resto sólo si tiene más de 25 líneas.
+   *
+   * El embed de `expand` capa la colección anidada a 25 items silenciosamente; el
+   * endpoint dedicado `/shippings/{id}/details.json` respeta `limit` hasta 50, así que
+   * se pagina hasta agotar y `details` refleja el total real (no un conteo truncado).
+   *
+   * Costo en requests:
+   * - ≤ 25 líneas → 1 request total.
+   * - N > 25 líneas → `1 + ⌈(N-25)/50⌉` requests.
+   *
+   * @param id - ID del despacho.
+   * @param options.expand - Sub-recursos adicionales a expandir (ej. `['guide']`).
+   *   `details` siempre se incluye automáticamente.
+   * @param options.signal - AbortSignal propagado a todas las requests.
+   * @param options.skipCache - Bypass de cache.
+   */
+  async getWithDetails(
+    id: number,
+    options?: {
+      readonly expand?: ReadonlyArray<string>;
+      readonly signal?: AbortSignal;
+      readonly skipCache?: boolean;
+    },
+  ): Promise<{ shipping: BsaleShipping; details: BsaleShippingDetail[] }> {
+    const expandList = ['details', ...(options?.expand ?? [])];
+    const requestOptions =
+      options?.signal || options?.skipCache
+        ? { signal: options.signal, skipCache: options.skipCache }
+        : undefined;
+
+    const shipping = await this.getById(id, { expand: expandList.join(',') }, requestOptions);
+
+    const raw = shipping as BsaleShipping & {
+      details?: BsaleListResponse<BsaleShippingDetail> | { href: string };
+    };
+    const embedded =
+      raw.details && 'items' in raw.details
+        ? (raw.details as BsaleListResponse<BsaleShippingDetail>)
+        : undefined;
+
+    const details = await this.paginateSubresource<BsaleShippingDetail>(
+      `/shippings/${id}/details.json`,
+      {
+        embedded,
+        signal: options?.signal,
+        skipCache: options?.skipCache,
+      },
+    );
+
+    return { shipping, details };
+  }
+
+  /**
    * Anula un despacho. Pone `state=1` y **revierte el descuento de stock**.
    * Response: `{ status, data: <despacho con state=1> }`.
    */
