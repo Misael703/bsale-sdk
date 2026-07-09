@@ -13,7 +13,15 @@ import type {
 export class ReturnsResource extends BaseResource<BsaleReturn> {
   protected readonly path = 'returns';
 
-  /** Lista los detalles de una devolución. */
+  /**
+   * Lista los detalles de una devolución (endpoint dedicado, una sola página).
+   *
+   * Cada ítem incluye `documentDetailId` (la línea del documento de venta
+   * original que se devuelve) además de `quantity, quantityDevStock, variantStock,
+   * variantCost`. No trae objeto `variant`: la variante se resuelve vía
+   * `documentDetailId`. Para paginar NCs con más de 25 líneas ver
+   * {@link ReturnsResource.getWithDetails}.
+   */
   async getDetails(
     returnId: number,
     params?: BsaleQueryParams,
@@ -51,6 +59,13 @@ export class ReturnsResource extends BaseResource<BsaleReturn> {
    *
    * La devolución se retorna bajo la clave `returnDoc` (no `return`, palabra
    * reservada) — es el `BsaleReturn` completo.
+   *
+   * Cada detalle trae `documentDetailId` (la línea del documento de venta original
+   * que se devuelve) — presente tanto en el embed como en el endpoint dedicado,
+   * confirmado empíricamente sobre una NC real (2026-07-08), aunque Bsale NO lo
+   * documenta como campo de respuesta. Es la clave para mapear cada línea de la NC
+   * a su variante. Aplica también a la cola (>25 líneas) paginada desde el endpoint
+   * dedicado, así que el mapeo es consistente para NCs de cualquier tamaño.
    *
    * @param id - ID de la devolución.
    * @param options.expand - Sub-recursos adicionales a expandir (ej. `['credit_note']`).

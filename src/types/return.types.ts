@@ -27,7 +27,18 @@ export interface BsaleReturn {
   };
 }
 
-/** Bsale return detail entity */
+/**
+ * Bsale return detail entity — item del sub-recurso `/returns/{id}/details`.
+ *
+ * `documentDetailId` referencia la línea del documento de VENTA ORIGINAL que se
+ * devuelve (no la línea de la NC) — es la clave para mapear cada línea de la
+ * devolución a su variante vía el detalle del documento original. Bsale NO lo
+ * documenta como campo de respuesta (solo como input del `POST /returns.json`),
+ * pero tanto el endpoint dedicado como el embed `expand=details` lo devuelven —
+ * confirmado empíricamente sobre una NC real (2026-07-08). El detalle de NC NO
+ * trae objeto `variant` (a diferencia de {@link BsaleShippingDetail}); la
+ * variante se resuelve por `documentDetailId`.
+ */
 export interface BsaleReturnDetail {
   readonly href: string;
   readonly id: number;
@@ -35,6 +46,8 @@ export interface BsaleReturnDetail {
   readonly quantityDevStock: number;
   readonly variantStock: number;
   readonly variantCost: number;
+  /** ID del detalle del documento de venta original que se devuelve. */
+  readonly documentDetailId: number;
 }
 
 /** Detail line for creating a return */

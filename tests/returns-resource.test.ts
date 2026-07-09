@@ -18,6 +18,9 @@ function makeDetailItem(id: number): BsaleReturnDetail {
     quantityDevStock: 1,
     variantStock: 0,
     variantCost: 0,
+    // Referencia a la línea del documento de venta original (distinta del id de
+    // la línea de NC, para poder aseverar que el mapeo no las confunde).
+    documentDetailId: 2_000_000 + id,
   };
 }
 
@@ -145,6 +148,13 @@ describe('ReturnsResource.getWithDetails', () => {
     expect(result.details).toHaveLength(32);
     expect(result.details[0].id).toBe(1);
     expect(result.details[31].id).toBe(32);
+
+    // La cola (líneas 26+) sale del endpoint dedicado y debe conservar
+    // documentDetailId: es la clave de mapeo línea→variante que, si faltara,
+    // sub-contaría el `credited` de NCs grandes (el bug que este método cierra).
+    const tailLine = result.details[31];
+    expect(tailLine.documentDetailId).toBe(2_000_000 + 32);
+    expect(result.details.every((d) => typeof d.documentDetailId === 'number')).toBe(true);
 
     const [tailUrl] = mockFetch.mock.calls[1];
     expect(tailUrl).toContain('/returns/100/details.json');
