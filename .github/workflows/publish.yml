@@ -48,11 +48,13 @@ jobs:
           # configurado (incluso vacío/inválido) usa token-auth y nunca dispara
           # el flow OIDC del Trusted Publisher. Limpiamos ambos para forzar
           # OIDC. El OIDC automático requiere npm >= 11.5.1; Node 22 LTS
-          # bundlea npm 10, así que instalamos npm latest antes de publicar.
-          # (Node 22, no 20: npm@latest ya es 12.x y exige Node >=22.)
+          # bundlea npm 10, así que actualizamos npm antes de publicar.
+          # Pin a npm@11 (no @latest): npm@12.0.0 exige Node >=22 y además
+          # rompe `--provenance` (MODULE_NOT_FOUND: sigstore). npm@11 es
+          # estable, trae OIDC (>=11.5.1) y provenance funcionando.
           NPM_CONFIG_USERCONFIG: ''
           NODE_AUTH_TOKEN: ''
         run: |
-          npm install -g npm@latest
+          npm install -g npm@11
           echo "npm version: $(npm --version)"
           npm publish --provenance --access public
