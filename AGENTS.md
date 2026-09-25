@@ -206,7 +206,7 @@ pnpm test             # Correr tests
 pnpm test:watch       # Tests en watch mode
 pnpm lint             # Linting
 pnpm format           # Formatear código
-pnpm publish          # Publicar a GitHub Packages
+pnpm publish          # Publicar a npmjs
 ```
 
 ## Code Style
@@ -217,7 +217,7 @@ pnpm publish          # Publicar a GitHub Packages
 - Nombres de archivos en kebab-case: `http-client.ts`, `base.resource.ts`
 - Tipos/interfaces con prefijo `Bsale`: `BsaleProduct`, `BsaleConfig`
 - Resources con sufijo `Resource`: `ProductsResource`
-- NO usar `any` excepto en `BsaleQueryParams` para filtros dinámicos
+- NO usar `any` (los filtros dinámicos de `BsaleQueryParams` usan `BsaleQueryValue`)
 - Comentarios JSDoc en métodos públicos
 - Errores siempre como `BsaleApiError` (no strings ni Error genéricos)
 

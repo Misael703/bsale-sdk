@@ -56,10 +56,7 @@ export class ProductsResource extends BaseResource<BsaleProduct> {
   }
 
   /** Actualiza un producto (solo `name`, `productTypeId`, `allowDecimal`, `description`). */
-  async update(
-    id: number,
-    data: Omit<BsaleProductUpdatePayload, 'id'>,
-  ): Promise<BsaleProduct> {
+  async update(id: number, data: Omit<BsaleProductUpdatePayload, 'id'>): Promise<BsaleProduct> {
     return this.http.put<BsaleProduct>(`/products/${id}.json`, { id: String(id), ...data });
   }
 

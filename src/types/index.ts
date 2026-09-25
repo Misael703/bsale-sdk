@@ -83,14 +83,8 @@ export type {
   BsaleShippingClient,
   BsaleCreateShippingPayload,
 } from './shipping.types';
-export type {
-  BsalePaymentType,
-  BsaleCreatePaymentTypePayload,
-} from './payment-type.types';
-export type {
-  BsaleDynamicAttribute,
-  BsaleDynamicAttributeDetail,
-} from './dynamic-attribute.types';
+export type { BsalePaymentType, BsaleCreatePaymentTypePayload } from './payment-type.types';
+export type { BsaleDynamicAttribute, BsaleDynamicAttributeDetail } from './dynamic-attribute.types';
 export type { BsaleBookType } from './book-type.types';
 export type { BsaleDteCode } from './dte-code.types';
 export type { BsaleTax } from './tax.types';
