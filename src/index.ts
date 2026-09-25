@@ -2,6 +2,7 @@
 export { BsaleClient } from './client/bsale-client';
 export { HttpClient } from './client/http-client';
 export type { HttpRequestOptions } from './client/http-client';
+export { BsaleRateLimiter, BSALE_DEFAULT_REQUESTS_PER_SECOND } from './client/rate-limiter';
 
 // Error
 export { BsaleApiError } from './errors/bsale.error';
@@ -52,13 +53,19 @@ export type {
   // Config
   BsaleConfig,
   BsaleHosts,
+  BsaleRateLimiterOptions,
   // Middleware
   BsaleMiddleware,
   BsaleRequestContext,
   // Common
   BsaleListResponse,
   BsaleQueryParams,
+  BsaleQueryValue,
   BsalePaginateOptions,
+  BsaleRequestPriority,
+  BsaleExpandKeys,
+  BsaleExpanded,
+  BsaleNoExpansions,
   // Productos / variantes
   BsaleProduct,
   BsaleProductTax,
@@ -73,6 +80,8 @@ export type {
   BsaleVariantAttributeValue,
   BsaleVariantAttributeValueInput,
   BsaleVariantCosts,
+  BsaleVariantExpansions,
+  BsaleVariantWithProduct,
   // Documentos
   BsaleDocument,
   BsaleDocumentDetail,

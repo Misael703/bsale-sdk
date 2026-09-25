@@ -1,3 +1,6 @@
+import type { BsaleExpanded } from './common.types';
+import type { BsaleProduct } from './product.types';
+
 /** Variante de un producto. */
 export interface BsaleVariant {
   readonly id: number;
@@ -9,6 +12,12 @@ export interface BsaleVariant {
   readonly barCode?: string;
   readonly code?: string;
   readonly serialNumber?: 0 | 1;
+  /**
+   * 1 si la variante permite series repetidas (lotes). No figura en la tabla
+   * de respuesta de docs.bsale.dev/variantes (solo como input de producto),
+   * pero `GET /variants.json` lo devuelve (verificado en vivo, 2026-09).
+   */
+  readonly isLot?: 0 | 1;
   /** Campos legacy de Imagestion (todos vienen aunque sean 0). */
   readonly imagestionCenterCost?: number | string;
   readonly imagestionAccount?: number | string;
@@ -19,7 +28,12 @@ export interface BsaleVariant {
   /** Campos legacy de PrestaShop. */
   readonly prestashopCombinationId?: number;
   readonly prestashopValueId?: number;
-  readonly product?: { readonly id: number; readonly href: string };
+  /**
+   * Referencia al producto padre. Sin `expand` el `id` llega como **string**
+   * (`{ "id": "24410" }`, verificado en vivo 2026-09) aunque la doc lo muestre
+   * numérico. Con `expand: 'product'` usar `BsaleVariantWithProduct`.
+   */
+  readonly product?: { readonly id: string; readonly href: string };
   readonly attribute_values?: { readonly href: string };
   readonly costs?: { readonly href: string };
   readonly href: string;
@@ -42,9 +56,30 @@ export interface BsaleVariantAttributeValue {
   readonly href: string;
 }
 
+/**
+ * Relaciones de `/variants` que se pueden pedir con `expand` y su forma
+ * embebida. `product` llega como objeto completo, 1:1 (verificado en vivo 2026-09).
+ */
+export interface BsaleVariantExpansions {
+  readonly product: BsaleProduct;
+}
+
+/** Variante leída con `expand: 'product'`: el producto viene embebido completo. */
+export type BsaleVariantWithProduct = BsaleExpanded<
+  BsaleVariant,
+  BsaleVariantExpansions,
+  'product'
+>;
+
 /** Response de `/variants/{id}/costs.json` (no paginado). */
 export interface BsaleVariantCosts {
-  readonly averageCost: string;
+  /**
+   * Costo promedio. La doc lo muestra como string (`"4140.0"`), pero la API
+   * devuelve un número (`2915.37`, verificado en vivo 2026-09).
+   */
+  readonly averageCost: number;
+  /** Costo total del stock valorizado. No documentado; lo devuelve la API (verificado en vivo 2026-09). */
+  readonly totalCost?: number;
   readonly history: ReadonlyArray<{
     readonly reception_detail: { readonly id: number; readonly href: string };
     readonly admissionDate: number;

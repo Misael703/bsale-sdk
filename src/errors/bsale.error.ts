@@ -1,3 +1,5 @@
+import { parseRetryAfterMs } from '../utils/retry-after.utils';
+
 interface ParsedBsaleError {
   message?: string;
   code?: string;
@@ -38,6 +40,18 @@ function parseBsaleErrorBody(body: unknown): ParsedBsaleError {
   return { message, code, details };
 }
 
+function normalizeHeaders(
+  headers: Headers | Readonly<Record<string, string>> | undefined,
+): Readonly<Record<string, string>> {
+  const normalized: Record<string, string> = {};
+  if (!headers) return normalized;
+  const entries = headers instanceof Headers ? headers.entries() : Object.entries(headers);
+  for (const [name, value] of entries) {
+    normalized[name.toLowerCase()] = value;
+  }
+  return normalized;
+}
+
 /**
  * Custom error class for Bsale API errors.
  * Provides helper getters to identify common error types and parses the
@@ -54,8 +68,16 @@ export class BsaleApiError extends Error {
   readonly code?: string;
   /** Validation details / error array (best-effort parsing) */
   readonly details?: unknown;
+  /** Headers de la respuesta, con nombres en minúscula (`retry-after`, ...). Vacío si no hubo respuesta. */
+  readonly headers: Readonly<Record<string, string>>;
 
-  constructor(message: string, status: number, responseBody: unknown, path: string) {
+  constructor(
+    message: string,
+    status: number,
+    responseBody: unknown,
+    path: string,
+    headers?: Headers | Readonly<Record<string, string>>,
+  ) {
     const parsed = parseBsaleErrorBody(responseBody);
     const fullMessage = parsed.message ? `${message} — ${parsed.message}` : message;
     super(fullMessage);
@@ -65,6 +87,16 @@ export class BsaleApiError extends Error {
     this.path = path;
     this.code = parsed.code;
     this.details = parsed.details;
+    this.headers = normalizeHeaders(headers);
+  }
+
+  /**
+   * Espera pedida por el servidor en el header `Retry-After`, en ms, sin
+   * recortar (el retry interno del cliente sí la recorta a 60 s).
+   * `undefined` si el header falta o no se puede parsear.
+   */
+  get retryAfterMs(): number | undefined {
+    return parseRetryAfterMs(this.headers['retry-after']);
   }
 
   /** Whether this is a rate limit error (429) */

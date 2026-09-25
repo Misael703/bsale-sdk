@@ -1,4 +1,5 @@
 import { HttpClient } from './http-client';
+import { resolveRateLimiter } from './rate-limiter';
 import {
   ProductsResource,
   VariantsResource,
@@ -159,11 +160,17 @@ export class BsaleClient {
     const courierBase = `${config.hosts?.courier ?? DEFAULT_HOSTS.courier}/v1`;
     const bcashBase = `${config.hosts?.bcash ?? DEFAULT_HOSTS.bcash}/v1`;
 
-    this.apiHttp = new HttpClient({ ...config, baseUrl: apiBase });
-    this.bspHttp = new HttpClient({ ...config, baseUrl: bspBase });
-    this.credentialHttp = new HttpClient({ ...config, baseUrl: credentialBase });
-    this.courierHttp = new HttpClient({ ...config, baseUrl: courierBase });
-    this.bcashHttp = new HttpClient({ ...config, baseUrl: bcashBase });
+    // Un solo bucket para los 5 hosts: el presupuesto de Bsale es por token, no por host.
+    const shared: BsaleConfig = {
+      ...config,
+      rateLimit: resolveRateLimiter(config.rateLimit) ?? false,
+    };
+
+    this.apiHttp = new HttpClient({ ...shared, baseUrl: apiBase });
+    this.bspHttp = new HttpClient({ ...shared, baseUrl: bspBase });
+    this.credentialHttp = new HttpClient({ ...shared, baseUrl: credentialBase });
+    this.courierHttp = new HttpClient({ ...shared, baseUrl: courierBase });
+    this.bcashHttp = new HttpClient({ ...shared, baseUrl: bcashBase });
 
     // Recursos del host principal.
     this.products = new ProductsResource(this.apiHttp);

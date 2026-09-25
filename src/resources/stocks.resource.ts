@@ -12,8 +12,8 @@ export class StocksResource extends BaseResource<BsaleStock> {
    * @returns Paginated list of stock entries
    */
   async getByVariantAndOffice(
-    variantId: number,
-    officeId: number,
+    variantId: number | string,
+    officeId: number | string,
   ): Promise<BsaleListResponse<BsaleStock>> {
     return this.list({ variantid: variantId, officeid: officeId });
   }
