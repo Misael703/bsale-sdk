@@ -30,6 +30,7 @@ const bsale = new BsaleClient({
   // timeout: 15000,                              // ms, default
   // maxRetries: 3,                               // default
   // cacheTtlMs: 60000,                           // ms, default
+  // rateLimit: { requestsPerSecond: 8 },         // default; `false` lo desactiva
   // logger: (msg, data) => console.log(msg, data),
 });
 ```
@@ -69,12 +70,15 @@ Todos los resources tienen estos 4 métodos base:
 const response = await bsale.products.list({ limit: 50, offset: 0, state: 0 });
 // → BsaleListResponse<T> { count, limit, offset, items: T[], next? }
 
-// Obtener TODOS los items (pagina automáticamente)
+// Obtener TODOS los items (pagina automáticamente, termina por `count`)
 const all = await bsale.products.listAll(
   { state: 0 },               // query params opcionales
-  { maxItems: 200, pageSize: 50 } // opciones de paginación
+  { maxItems: 200, pageSize: 50 } // opciones: maxItems, pageSize, signal, skipCache, priority
 );
 // → T[]
+
+// Lo mismo como async iterator (memoria O(1))
+for await (const product of bsale.products.iterate({ state: 0 }, { priority: 'low' })) { /* ... */ }
 
 // Obtener por ID
 const product = await bsale.products.getById(123, { expand: 'variants' });
@@ -107,7 +111,7 @@ await bsale.products.list(params?)                    // GET /products.json
 await bsale.products.listAll(params?, options?)        // todas las páginas
 await bsale.products.getById(id, params?)              // GET /products/{id}.json
 await bsale.products.count(params?)                    // GET /products/count.json
-await bsale.products.getVariants(productId, params?)   // GET /products/{id}/variants.json
+await bsale.products.getVariants(productId, params?, requestOptions?) // GET /products/{id}/variants.json
 await bsale.products.create(data)                      // POST /products.json
 await bsale.products.update(id, data)                  // PUT /products/{id}.json
 ```
@@ -117,6 +121,8 @@ await bsale.products.update(id, data)                  // PUT /products/{id}.jso
 ```typescript
 await bsale.variants.list(params?)
 await bsale.variants.getById(id, params?)
+// expand tipado: el producto viene embebido y tipado como BsaleProduct
+for await (const v of bsale.variants.iterate({ expand: 'product' })) v.product.name;
 await bsale.variants.create(data)                      // POST /variants.json
 await bsale.variants.update(id, data)                  // PUT /variants/{id}.json
 await bsale.variants.getCosts(variantId)               // GET /variants/{id}/costs.json
@@ -363,11 +369,14 @@ try {
     error.isNotFound;    // true si 404
     error.isRateLimit;   // true si 429
     error.isServerError; // true si >= 500
+    error.headers;       // headers de la respuesta (nombres en minúscula)
+    error.retryAfterMs;  // Retry-After en ms, sin recortar
   }
 }
 ```
 
 El SDK maneja automáticamente:
+- **Límite de velocidad:** token bucket de 8 req/s por cliente con carriles `high` (default) y `low` (`priority: 'low'` para syncs). Para compartirlo entre clientes con el mismo token, pasar la misma `BsaleRateLimiter` en `rateLimit`.
 - **Rate limit (429):** Espera `Retry-After` header y reintenta.
 - **Errores 5xx:** Retry con backoff exponencial (hasta `maxRetries`).
 - **Timeout:** AbortController con el tiempo configurado.
@@ -414,8 +423,9 @@ import type {
 
   // Respuesta paginada genérica
   BsaleListResponse,    // { count, limit, offset, items: T[], next? }
-  BsaleQueryParams,     // { limit?, offset?, expand?, fields?, [key]: any }
-  BsalePaginateOptions, // { maxItems?, pageSize? }
+  BsaleQueryParams,     // { limit?, offset?, expand?, fields?, [key]: BsaleQueryValue }
+  BsalePaginateOptions, // { maxItems?, pageSize?, signal?, skipCache?, priority? }
+  BsaleVariantWithProduct, // variante leída con expand: 'product'
 
   // Entidades (lo que devuelve la API)
   BsaleProduct,
@@ -481,6 +491,8 @@ import type {
 4. **El tipo del cliente se exporta como `BsaleClientType`** (no `BsaleClient`) para evitar colisión con la clase principal `BsaleClient`.
 5. **El token va como header `access_token`**, NO como `Authorization: Bearer`. El SDK ya lo maneja, no hay que preocuparse.
 6. **Los webhooks usan `/v2/`** en el campo `resource`, pero la API principal es `/v1/`. El SDK lo maneja transparentemente.
+7. **Ids de relación como string.** Sin `expand`, `variant.product.id`, `product.product_type.id`, `stock.variant.id`, `stock.office.id` y `priceList.id` llegan como string. Los métodos del SDK aceptan `number | string`; para comparar con ids numéricos, usar `Number(id)`.
+8. **`product.name` puede ser `null`** (el texto queda en `description`).
 
 ## Patrón recomendado para proyectos consumidores
 
