@@ -1,6 +1,14 @@
 import { BsaleApiError } from '../errors/bsale.error';
 import { LRUCache } from '../utils/lru-cache';
-import type { BsaleConfig, BsaleMiddleware, BsaleRequestContext } from '../types';
+import { toAbortError } from '../utils/abort.utils';
+import { parseRetryAfterMs } from '../utils/retry-after.utils';
+import { resolveRateLimiter, type BsaleRateLimiter } from './rate-limiter';
+import type {
+  BsaleConfig,
+  BsaleMiddleware,
+  BsaleRequestContext,
+  BsaleRequestPriority,
+} from '../types';
 
 interface CacheEntry {
   readonly data: unknown;
@@ -32,7 +40,14 @@ export interface HttpRequestOptions {
    * duplicados en el lado del servidor (cuando el servidor lo soporte).
    */
   readonly idempotencyKey?: string;
+  /**
+   * Carril del limitador de velocidad (default: `high`). Usar `low` en syncs
+   * en segundo plano para que cedan el paso a lecturas interactivas y emisión.
+   */
+  readonly priority?: BsaleRequestPriority;
 }
+
+const DEFAULT_PRIORITY: BsaleRequestPriority = 'high';
 
 const DEFAULT_BASE_URL = 'https://api.bsale.io/v1';
 const DEFAULT_TIMEOUT = 15_000;
@@ -61,6 +76,7 @@ export class HttpClient {
   private readonly cache: LRUCache<CacheEntry>;
   private readonly inFlight = new Map<string, Promise<unknown>>();
   private readonly middlewares: BsaleMiddleware[];
+  private readonly rateLimiter: BsaleRateLimiter | undefined;
 
   constructor(config: BsaleConfig & { baseUrl?: string }) {
     this.accessToken = config.accessToken;
@@ -72,6 +88,7 @@ export class HttpClient {
     this.cache = new LRUCache<CacheEntry>(config.cacheMaxEntries ?? DEFAULT_CACHE_MAX_ENTRIES);
     this.logger = config.logger;
     this.middlewares = config.middlewares ? [...config.middlewares] : [];
+    this.rateLimiter = resolveRateLimiter(config.rateLimit);
   }
 
   /** Adds a middleware after construction. Applies to all subsequent requests. */
@@ -223,10 +240,15 @@ export class HttpClient {
     const userSignal = options?.signal;
 
     if (userSignal?.aborted) {
-      throw this.makeAbortError(userSignal);
+      throw toAbortError(userSignal);
     }
 
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+      // Antes de armar el timeout: la espera en la cola no consume el timeout del intento.
+      if (this.rateLimiter && !this.rateLimiter.tryAcquire()) {
+        await this.rateLimiter.acquire(options?.priority ?? DEFAULT_PRIORITY, userSignal);
+      }
+
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.timeout);
       const onUserAbort = (): void => controller.abort();
@@ -266,9 +288,10 @@ export class HttpClient {
               429,
               responseBody,
               url,
+              response.headers,
             );
           }
-          const waitMs = this.parseRetryAfter(response.headers.get('Retry-After'));
+          const waitMs = this.retryAfterWaitMs(response.headers.get('Retry-After'));
           this.logger?.('Rate limited, waiting', { waitMs, attempt });
           await this.sleep(waitMs);
           continue;
@@ -288,6 +311,7 @@ export class HttpClient {
             response.status,
             responseBody,
             url,
+            response.headers,
           );
         }
 
@@ -303,7 +327,7 @@ export class HttpClient {
         }
 
         if (userSignal?.aborted) {
-          throw this.makeAbortError(userSignal);
+          throw toAbortError(userSignal);
         }
 
         lastError = error as Error;
@@ -373,21 +397,14 @@ export class HttpClient {
     return this.cacheTtlMs;
   }
 
-  private makeAbortError(signal: AbortSignal): Error {
-    if (signal.reason instanceof Error) return signal.reason;
-    const err = new Error('Request aborted');
-    err.name = 'AbortError';
-    return err;
-  }
-
   private awaitWithSignal<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
     if (!signal) return promise;
-    if (signal.aborted) return Promise.reject(this.makeAbortError(signal));
+    if (signal.aborted) return Promise.reject(toAbortError(signal));
 
     return new Promise<T>((resolve, reject) => {
       const onAbort = (): void => {
         signal.removeEventListener('abort', onAbort);
-        reject(this.makeAbortError(signal));
+        reject(toAbortError(signal));
       };
       signal.addEventListener('abort', onAbort, { once: true });
       promise.then(
@@ -403,23 +420,10 @@ export class HttpClient {
     });
   }
 
-  private parseRetryAfter(headerValue: string | null): number {
-    if (!headerValue) return DEFAULT_RETRY_AFTER_MS;
-    const trimmed = headerValue.trim();
-    if (!trimmed) return DEFAULT_RETRY_AFTER_MS;
-
-    if (/^\d+$/.test(trimmed)) {
-      const seconds = parseInt(trimmed, 10);
-      return Math.min(seconds * 1000, MAX_RETRY_AFTER_MS);
-    }
-
-    const dateMs = Date.parse(trimmed);
-    if (Number.isFinite(dateMs)) {
-      const delta = dateMs - Date.now();
-      return Math.max(0, Math.min(delta, MAX_RETRY_AFTER_MS));
-    }
-
-    return DEFAULT_RETRY_AFTER_MS;
+  private retryAfterWaitMs(headerValue: string | null): number {
+    const requestedMs = parseRetryAfterMs(headerValue);
+    if (requestedMs === undefined) return DEFAULT_RETRY_AFTER_MS;
+    return Math.min(requestedMs, MAX_RETRY_AFTER_MS);
   }
 
   private async safeParseJson(response: Response): Promise<unknown> {

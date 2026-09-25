@@ -1,6 +1,7 @@
 /** Bsale price list entity */
 export interface BsalePriceList {
-  readonly id: number;
+  /** Llega como **string** (`"310"`, verificado en vivo 2026-09) aunque la doc lo muestre numérico. */
+  readonly id: string;
   readonly name: string;
   readonly description?: string;
   readonly state: number;

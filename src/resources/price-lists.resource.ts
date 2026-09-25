@@ -18,7 +18,7 @@ export class PriceListsResource extends BaseResource<BsalePriceList> {
    * @returns Paginated list of price list details
    */
   async getDetails(
-    priceListId: number,
+    priceListId: number | string,
     params?: BsaleQueryParams,
   ): Promise<BsaleListResponse<BsalePriceListDetail>> {
     return this.http.get<BsaleListResponse<BsalePriceListDetail>>(
@@ -28,7 +28,10 @@ export class PriceListsResource extends BaseResource<BsalePriceList> {
   }
 
   /** Detalle individual de una lista de precios. */
-  async getDetailById(priceListId: number, detailId: number): Promise<BsalePriceListDetail> {
+  async getDetailById(
+    priceListId: number | string,
+    detailId: number,
+  ): Promise<BsalePriceListDetail> {
     return this.http.get<BsalePriceListDetail>(
       `/price_lists/${priceListId}/details/${detailId}.json`,
     );
@@ -42,7 +45,7 @@ export class PriceListsResource extends BaseResource<BsalePriceList> {
    * @returns The updated detail
    */
   async updateDetail(
-    priceListId: number,
+    priceListId: number | string,
     detailId: number,
     data: BsalePriceListDetailPayload,
   ): Promise<BsalePriceListDetail> {

@@ -1,4 +1,5 @@
 import { BaseResource } from './base.resource';
+import type { HttpRequestOptions } from '../client/http-client';
 import type {
   BsaleProduct,
   BsaleProductPayload,
@@ -15,14 +16,21 @@ import type {
 export class ProductsResource extends BaseResource<BsaleProduct> {
   protected readonly path = 'products';
 
-  /** Lista las variantes de un producto. */
+  /**
+   * Lista las variantes de un producto (una página).
+   * @param productId - ID del producto (acepta el string de `variant.product.id`).
+   * @param params - Query params (`limit`, `offset`, `state`, ...).
+   * @param requestOptions - `signal`, `skipCache`, `priority`, etc.
+   */
   async getVariants(
-    productId: number,
+    productId: number | string,
     params?: BsaleQueryParams,
+    requestOptions?: HttpRequestOptions,
   ): Promise<BsaleListResponse<BsaleVariant>> {
     return this.http.get<BsaleListResponse<BsaleVariant>>(
       `/products/${productId}/variants.json`,
       params,
+      requestOptions,
     );
   }
 
@@ -48,10 +56,7 @@ export class ProductsResource extends BaseResource<BsaleProduct> {
   }
 
   /** Actualiza un producto (solo `name`, `productTypeId`, `allowDecimal`, `description`). */
-  async update(
-    id: number,
-    data: Omit<BsaleProductUpdatePayload, 'id'>,
-  ): Promise<BsaleProduct> {
+  async update(id: number, data: Omit<BsaleProductUpdatePayload, 'id'>): Promise<BsaleProduct> {
     return this.http.put<BsaleProduct>(`/products/${id}.json`, { id: String(id), ...data });
   }
 

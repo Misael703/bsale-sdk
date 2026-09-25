@@ -8,6 +8,9 @@ SDK en TypeScript para la API REST de [Bsale](https://www.bsale.cl) — versión
 - **Cache LRU + request coalescing** automáticos; TTL por recurso configurable.
 - **`AbortSignal`**, idempotency keys, async iterators y middleware Koa-style.
 - Retry con backoff exponencial, parser robusto de `Retry-After` (incluye HTTP-date).
+- **Limitador de velocidad** (token bucket de 8 req/s) con carriles `high`/`low`, compartible entre clientes.
+- Paginación que termina por `count`, no por página corta.
+- `expand` tipado: `variants.iterate({ expand: 'product' })` entrega el producto completo.
 - `BsaleApiError` enriquecido — parsea `code`, `details` y `message` del body.
 - Webhooks con tipos discriminados por `topic`.
 
@@ -84,6 +87,10 @@ const bsale = new BsaleClient({
 
   // Opcional — middlewares estilo Koa (ver sección Middleware).
   middlewares: [],
+
+  // Opcional — limitador de velocidad (ver sección Límite de velocidad).
+  // Default: token bucket de 8 req/s. `false` lo desactiva.
+  rateLimit: { requestsPerSecond: 8, burst: 8 },
 
   // Opcional — logger para request/response.
   logger: (message, data) => console.log(`[bsale] ${message}`, data),
@@ -170,10 +177,13 @@ El SDK pasa automáticamente cada recurso al host correcto. Solo hay que configu
 
 Cada recurso que extiende `BaseResource<T>` recibe gratis:
 
-- `list(params?)` — listado paginado.
-- `listAll(params?, options?)` — itera todas las páginas (max 50/página). Acepta `{ maxItems, pageSize }`.
-- `getById(id, params?)` — detalle.
+- `list(params?, requestOptions?)` — listado paginado.
+- `listAll(params?, options?)` — itera todas las páginas (max 50/página) hasta cubrir el `count` del listado. Acepta `{ maxItems, pageSize, signal, skipCache, priority }`.
+- `iterate(params?, options?)` — igual que `listAll`, pero como async iterator.
+- `getById(id, params?, requestOptions?)` — detalle. `id` acepta `number` o `string` (varias referencias de la API traen el id como string).
 - `count(params?)` — `{ count: number }`.
+
+En los recursos que declaran expansiones (hoy `variants`), `list`, `listAll`, `iterate` y `getById` tipan el resultado según el literal de `expand` (ver [Expand tipado](#expand-tipado)).
 
 ---
 
@@ -219,6 +229,22 @@ await bsale.variants.create({
 const costs = await bsale.variants.getCosts(456);
 const attrs = await bsale.variants.getAttributeValues(456);
 ```
+
+### Expand tipado
+
+Sin `expand`, las relaciones llegan como referencia `{ id, href }`. Con `expand`, la API embebe el objeto completo, y el SDK lo tipa a partir del literal que pasas:
+
+```typescript
+for await (const variant of bsale.variants.iterate({ expand: 'product' })) {
+  variant.product.name;          // BsaleProduct completo (string | null)
+  variant.product.allowDecimal;  // sin casteos
+}
+
+const v = await bsale.variants.getById(456);
+v.product?.id;                   // string: sin expand, Bsale entrega el id como string
+```
+
+El tipo resultante es `BsaleVariantWithProduct` (`Omit<BsaleVariant, 'product'> & { product: BsaleProduct }`). Un `expand` armado en runtime (`string` no literal) o una relación sin forma declarada devuelve el tipo base. Para declarar expansiones en otro recurso: `BaseResource<T, X>`, donde `X` mapea relación → forma embebida.
 
 ### Documentos
 
@@ -635,9 +661,42 @@ try {
 }
 ```
 
-`listAll()` chequea la signal entre páginas; `iterate()` también respeta cancelación.
+`listAll()` chequea la signal entre páginas; `iterate()` también respeta cancelación. Una request que espera turno en el limitador de velocidad también se cancela con su `signal`.
 
 > Comportamiento con coalescing: si dos callers comparten una fetch, abortar el caller que la originó cancela la fetch real y los demás reciben el error. Un caller que se sumó a una fetch en curso puede abortar su propio await sin afectar al resto — la fetch sigue para los otros.
+
+---
+
+## Límite de velocidad
+
+Bsale documenta un límite de **8 requests por segundo** por token (changelog 10/2025). El SDK lo respeta con un **token bucket** activo por defecto: hasta 8 requests salen de inmediato y luego una cada 125 ms. Las requests que no tienen token esperan en cola, sin error; los hits de cache no consumen tokens y cada reintento sí.
+
+La cola tiene dos carriles. `high` (default) es para tráfico interactivo y emisión de documentos; `low` es para syncs en segundo plano y siempre cede el paso a `high`:
+
+```typescript
+// Sync nocturno: cede el paso a la emisión y a las lecturas de la UI.
+for await (const variant of bsale.variants.iterate(
+  { expand: 'product' },
+  { priority: 'low', skipCache: true, signal },
+)) {
+  // ...
+}
+
+// Cualquier request individual acepta la prioridad en sus requestOptions.
+await bsale.products.getVariants(productId, { limit: 50 }, { priority: 'low' });
+```
+
+Cada `BsaleClient` tiene su propio bucket, compartido por sus 5 hosts. Si un proceso usa **varios clientes con el mismo token** (por ejemplo uno de emisión con `maxRetries: 0` y otro de lectura), comparte una instancia para que el presupuesto sea uno solo:
+
+```typescript
+import { BsaleClient, BsaleRateLimiter } from '@misael703/bsale-sdk';
+
+const limiter = new BsaleRateLimiter({ requestsPerSecond: 8 });
+const reader = new BsaleClient({ accessToken, rateLimit: limiter });
+const emitter = new BsaleClient({ accessToken, maxRetries: 0, timeout: 45_000, rateLimit: limiter });
+```
+
+`rateLimit: false` desactiva el limitador (queda solo la reacción al 429 con `Retry-After`).
 
 ---
 
@@ -656,7 +715,9 @@ for await (const doc of bsale.documents.iterate({
 }
 ```
 
-Soporta `maxItems`, `pageSize`, `signal` y `skipCache`.
+Soporta `maxItems`, `pageSize`, `signal`, `skipCache` y `priority`.
+
+`iterate()` y `listAll()` terminan cuando el offset alcanza el `count` del listado (releído en cada página) o ante una página vacía. Una página con menos items que `limit` **no** corta el recorrido: el offset avanza por los items recibidos, así que en el peor caso se repite un item, pero nunca se salta uno. Si un endpoint no trae `count`, se usa el criterio anterior (`next` ausente o página corta).
 
 ---
 
@@ -737,6 +798,8 @@ try {
     console.log(err.message);       // mensaje base + body.message si lo hay
     console.log(err.path);          // URL que falló
     console.log(err.responseBody);  // raw body, por si necesitas más
+    console.log(err.headers);       // headers de la respuesta, nombres en minúscula
+    console.log(err.retryAfterMs);  // Retry-After en ms, sin recortar (o undefined)
 
     if (err.isRateLimit) /* 429 */;
     if (err.isNotFound) /* 404 */;
@@ -900,6 +963,32 @@ const { document, details } = await bsale.documents.getWithDetails(824738, {
 ### Helper genérico debajo — `paginateSubresource()`
 
 `getWithDetails` usa `BaseResource.paginateSubresource<U>()` por debajo. Es un método `protected` reutilizable para paginar cualquier sub-recurso (incluyendo casos donde tienes la primera página ya embebida del `expand`). Se irá exponiendo en próximas versiones a través de helpers tipo `getAllReferences`, `getAllTaxes`, etc.
+
+---
+
+## Migración v0.7.0 → v0.8.0
+
+**Breaking changes de tipos** (sin cambios de API en runtime). Los tipos ahora reflejan lo que la API entrega, verificado en vivo en 2026-09, aunque la doc diga otra cosa:
+
+| Tipo | Campo | Antes | Ahora |
+|---|---|---|---|
+| `BsaleVariant` | `product.id` | `number` | `string` |
+| `BsaleProduct` | `product_type.id` | `number` | `string` |
+| `BsaleProduct` | `name` | `string` | `string \| null` |
+| `BsaleStock` | `variant.id` | `number` | `string` |
+| `BsaleStock` | `office.id` | `number` | `string` |
+| `BsalePriceList` | `id` | `number` | `string` |
+| `BsaleVariantCosts` | `averageCost` | `string` | `number` |
+| `BsaleQueryParams` | filtros dinámicos | `any` | `BsaleQueryValue` (`string \| number \| boolean \| null \| undefined`) |
+
+Los métodos que reciben esos ids (`getById`, `products.getVariants`, `priceLists.getDetails`/`getDetailById`/`updateDetail`, `stocks.getByVariantAndOffice`, `productTypes.getProducts`/`getAttributes`/`getAttributeById`) ahora aceptan `number | string`, así que puedes pasar el id tal como llega. Si comparabas o sumabas esos ids como números, conviértelos con `Number(id)`.
+
+**Cambios de comportamiento:**
+
+- **Limitador de velocidad activo por defecto** (8 req/s por cliente). Nunca rechaza una request: solo demora las que excederían el límite documentado, que Bsale respondería con 429. Para volver al comportamiento anterior: `rateLimit: false`.
+- **`listAll`/`iterate` terminan por `count`**. Antes, una página corta que no era la última cortaba el recorrido en silencio. Si dependías de ese corte, usa `maxItems`.
+
+**Nuevo (additive):** `BsaleRateLimiter` y la opción `priority`; `expand` tipado en `variants` (`BsaleVariantWithProduct`); `products.getVariants(id, params, requestOptions)`; `BsaleApiError.headers` y `retryAfterMs`; `BsaleVariant.isLot`; `BsaleVariantCosts.totalCost`.
 
 ---
 

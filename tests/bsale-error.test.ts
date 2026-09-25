@@ -57,4 +57,45 @@ describe('BsaleApiError', () => {
     expect(new BsaleApiError('', 429, null, '').isClientError).toBe(false);
     expect(new BsaleApiError('', 500, null, '').isClientError).toBe(false);
   });
+
+  describe('headers y Retry-After', () => {
+    it('expone los headers con nombres en minúscula', () => {
+      const err = new BsaleApiError(
+        '',
+        429,
+        null,
+        '/x.json',
+        new Headers({ 'Retry-After': '120' }),
+      );
+      expect(err.headers['retry-after']).toBe('120');
+    });
+
+    it('acepta un objeto plano de headers', () => {
+      const err = new BsaleApiError('', 503, null, '/x.json', { 'X-Request-Id': 'abc' });
+      expect(err.headers).toEqual({ 'x-request-id': 'abc' });
+    });
+
+    it('sin headers expone un objeto vacío y retryAfterMs undefined', () => {
+      const err = new BsaleApiError('', 500, null, '/x.json');
+      expect(err.headers).toEqual({});
+      expect(err.retryAfterMs).toBeUndefined();
+    });
+
+    it('retryAfterMs parsea delta-seconds sin recortar', () => {
+      const err = new BsaleApiError('', 429, null, '', { 'retry-after': '300' });
+      expect(err.retryAfterMs).toBe(300_000);
+    });
+
+    it('retryAfterMs parsea una HTTP-date', () => {
+      const inTenSeconds = new Date(Date.now() + 10_000).toUTCString();
+      const err = new BsaleApiError('', 429, null, '', { 'retry-after': inTenSeconds });
+      expect(err.retryAfterMs).toBeGreaterThan(8_000);
+      expect(err.retryAfterMs).toBeLessThanOrEqual(10_000);
+    });
+
+    it('retryAfterMs es undefined con un valor inválido', () => {
+      const err = new BsaleApiError('', 429, null, '', { 'retry-after': 'soon' });
+      expect(err.retryAfterMs).toBeUndefined();
+    });
+  });
 });

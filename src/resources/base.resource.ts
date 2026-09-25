@@ -1,13 +1,36 @@
 import { HttpClient, type HttpRequestOptions } from '../client/http-client';
-import type { BsaleListResponse, BsaleQueryParams, BsalePaginateOptions } from '../types';
+import { toAbortError } from '../utils/abort.utils';
+import type {
+  BsaleExpanded,
+  BsaleListResponse,
+  BsaleNoExpansions,
+  BsaleQueryParams,
+  BsalePaginateOptions,
+  BsaleRequestPriority,
+} from '../types';
 
 const MAX_PAGE_SIZE = 50;
+
+/** Params con el literal de `expand` capturado para tipar la respuesta. */
+type ExpandParams<E extends string> = BsaleQueryParams & { readonly expand?: E };
+
+/** Opciones de paginación que se reenvían a cada request de página. */
+interface PageRequestOptions {
+  readonly signal?: AbortSignal;
+  readonly skipCache?: boolean;
+  readonly priority?: BsaleRequestPriority;
+}
 
 /**
  * Abstract base class for Bsale API resources.
  * Provides standard CRUD and pagination methods.
+ *
+ * `X` es el mapa de expansiones del recurso (relación → forma embebida).
+ * Con él, `list`, `listAll`, `iterate` y `getById` tipan el resultado según el
+ * literal de `expand`: `variants.list({ expand: 'product' })` devuelve items
+ * con `product: BsaleProduct`. Recursos sin mapa no cambian su tipo.
  */
-export abstract class BaseResource<T> {
+export abstract class BaseResource<T, X extends object = BsaleNoExpansions> {
   /** API resource path (e.g., 'products') */
   protected abstract readonly path: string;
 
@@ -16,50 +39,31 @@ export abstract class BaseResource<T> {
   /**
    * Lists items with optional query parameters.
    */
-  async list(
-    params?: BsaleQueryParams,
+  async list<E extends string = never>(
+    params?: ExpandParams<E>,
     requestOptions?: HttpRequestOptions,
-  ): Promise<BsaleListResponse<T>> {
-    return this.http.get<BsaleListResponse<T>>(`/${this.path}.json`, params, requestOptions);
+  ): Promise<BsaleListResponse<BsaleExpanded<T, X, E>>> {
+    return this.http.get<BsaleListResponse<BsaleExpanded<T, X, E>>>(
+      `/${this.path}.json`,
+      params,
+      requestOptions,
+    );
   }
 
   /**
    * Fetches ALL items across all pages, respecting optional maxItems limit.
    * Automatically handles pagination with a max page size of 50.
-   * Honors `options.signal` to abort the pagination loop between pages.
+   * Termina cuando el offset alcanza el `count` del listado, no por página
+   * corta (ver `iterate`). Honors `options.signal` to abort between pages.
    */
-  async listAll(params?: BsaleQueryParams, options?: BsalePaginateOptions): Promise<T[]> {
-    const pageSize = Math.min(options?.pageSize ?? MAX_PAGE_SIZE, MAX_PAGE_SIZE);
-    const maxItems = options?.maxItems;
-    const items: T[] = [];
-    let offset = 0;
-
-    const requestOptions: HttpRequestOptions | undefined =
-      options?.signal || options?.skipCache
-        ? { signal: options.signal, skipCache: options.skipCache }
-        : undefined;
-
-    while (true) {
-      if (options?.signal?.aborted) {
-        throw options.signal.reason instanceof Error
-          ? options.signal.reason
-          : Object.assign(new Error('Pagination aborted'), { name: 'AbortError' });
-      }
-
-      const response = await this.list({ ...params, limit: pageSize, offset }, requestOptions);
-      items.push(...response.items);
-
-      if (maxItems && items.length >= maxItems) {
-        return items.slice(0, maxItems);
-      }
-
-      if (!response.next || response.items.length < pageSize) {
-        break;
-      }
-
-      offset += pageSize;
+  async listAll<E extends string = never>(
+    params?: ExpandParams<E>,
+    options?: BsalePaginateOptions,
+  ): Promise<BsaleExpanded<T, X, E>[]> {
+    const items: BsaleExpanded<T, X, E>[] = [];
+    for await (const item of this.iterate(params, options)) {
+      items.push(item);
     }
-
     return items;
   }
 
@@ -67,53 +71,50 @@ export abstract class BaseResource<T> {
    * Iterador asíncrono que pagina bajo demanda. Memoria-eficiente para
    * datasets grandes: emite items uno a uno sin cargar todo en RAM.
    *
+   * Termina cuando el offset alcanza el `count` del listado (o ante una página
+   * vacía). Una página corta que no es la última no corta la iteración: el
+   * offset avanza por los items recibidos, así que en el peor caso se repite
+   * un item, nunca se salta uno.
+   *
    * ```ts
    * for await (const doc of client.documents.iterate({ ... })) { ... }
    * ```
    */
-  async *iterate(
-    params?: BsaleQueryParams,
+  async *iterate<E extends string = never>(
+    params?: ExpandParams<E>,
     options?: BsalePaginateOptions,
-  ): AsyncIterableIterator<T> {
-    const pageSize = Math.min(options?.pageSize ?? MAX_PAGE_SIZE, MAX_PAGE_SIZE);
+  ): AsyncIterableIterator<BsaleExpanded<T, X, E>> {
     const maxItems = options?.maxItems;
-    let offset = 0;
     let yielded = 0;
 
-    const requestOptions: HttpRequestOptions | undefined =
-      options?.signal || options?.skipCache
-        ? { signal: options.signal, skipCache: options.skipCache }
-        : undefined;
+    const pages = this.paginate<BsaleExpanded<T, X, E>>(
+      (query, requestOptions) => this.list<E>({ ...params, ...query }, requestOptions),
+      options,
+    );
 
-    while (true) {
-      if (options?.signal?.aborted) {
-        throw options.signal.reason instanceof Error
-          ? options.signal.reason
-          : Object.assign(new Error('Pagination aborted'), { name: 'AbortError' });
-      }
-
-      const response = await this.list({ ...params, limit: pageSize, offset }, requestOptions);
-
-      for (const item of response.items) {
+    for await (const page of pages) {
+      for (const item of page) {
         yield item;
         yielded++;
         if (maxItems && yielded >= maxItems) return;
       }
-
-      if (!response.next || response.items.length < pageSize) return;
-      offset += pageSize;
     }
   }
 
   /**
-   * Fetches a single item by its ID.
+   * Fetches a single item by its ID. Acepta el id como string porque varias
+   * referencias de la API lo entregan así (ej. `variant.product.id`).
    */
-  async getById(
-    id: number,
-    params?: BsaleQueryParams,
+  async getById<E extends string = never>(
+    id: number | string,
+    params?: ExpandParams<E>,
     requestOptions?: HttpRequestOptions,
-  ): Promise<T> {
-    return this.http.get<T>(`/${this.path}/${id}.json`, params, requestOptions);
+  ): Promise<BsaleExpanded<T, X, E>> {
+    return this.http.get<BsaleExpanded<T, X, E>>(
+      `/${this.path}/${id}.json`,
+      params,
+      requestOptions,
+    );
   }
 
   /**
@@ -140,57 +141,84 @@ export abstract class BaseResource<T> {
    * @param options.pageSize - Tamaño de página para el loop (default 50).
    * @param options.signal - AbortSignal para cancelar entre páginas.
    * @param options.skipCache - Bypass de cache en cada página.
+   * @param options.priority - Carril del limitador para cada página.
    */
   protected async paginateSubresource<U>(
     path: string,
-    options?: {
+    options?: PageRequestOptions & {
       readonly params?: BsaleQueryParams;
       readonly embedded?: BsaleListResponse<U>;
       readonly pageSize?: number;
-      readonly signal?: AbortSignal;
-      readonly skipCache?: boolean;
     },
   ): Promise<U[]> {
-    const pageSize = Math.min(options?.pageSize ?? MAX_PAGE_SIZE, MAX_PAGE_SIZE);
     const all: U[] = [];
-    let offset = 0;
-
-    const requestOptions: HttpRequestOptions | undefined =
-      options?.signal || options?.skipCache
-        ? { signal: options.signal, skipCache: options.skipCache }
-        : undefined;
+    let startOffset = 0;
 
     if (options?.embedded) {
       all.push(...options.embedded.items);
-      const total = options.embedded.count;
-      if (all.length >= total) {
+      if (all.length >= options.embedded.count) {
         return all;
       }
-      offset = all.length;
+      startOffset = all.length;
     }
 
-    while (true) {
-      if (options?.signal?.aborted) {
-        throw options.signal.reason instanceof Error
-          ? options.signal.reason
-          : Object.assign(new Error('Pagination aborted'), { name: 'AbortError' });
-      }
-
-      const page = await this.http.get<BsaleListResponse<U>>(
-        path,
-        { ...options?.params, limit: pageSize, offset },
-        requestOptions,
-      );
-
-      all.push(...page.items);
-
-      if (!page.next || page.items.length < pageSize) {
-        break;
-      }
-
-      offset += page.items.length;
+    const pages = this.paginate<U>(
+      (query, requestOptions) =>
+        this.http.get<BsaleListResponse<U>>(path, { ...options?.params, ...query }, requestOptions),
+      options,
+      startOffset,
+    );
+    for await (const page of pages) {
+      all.push(...page);
     }
 
     return all;
   }
+
+  /**
+   * Motor de paginación por offset compartido por `iterate`, `listAll` y
+   * `paginateSubresource`. Emite los items de cada página.
+   *
+   * Termina por `count` y no por página corta: Bsale puede devolver una página
+   * con menos items que `limit` sin que sea la última, y cortar ahí terminaba
+   * el recorrido en silencio como si fuera completo. El `count` se relee en
+   * cada página (puede cambiar mientras se recorre). Si el endpoint no trae
+   * `count`, se cae al criterio anterior (`next` ausente o página corta).
+   */
+  private async *paginate<U>(
+    fetchPage: (
+      query: { readonly limit: number; readonly offset: number },
+      requestOptions: HttpRequestOptions | undefined,
+    ) => Promise<BsaleListResponse<U>>,
+    options: (PageRequestOptions & { readonly pageSize?: number }) | undefined,
+    startOffset = 0,
+  ): AsyncGenerator<U[]> {
+    const pageSize = Math.min(options?.pageSize ?? MAX_PAGE_SIZE, MAX_PAGE_SIZE);
+    const requestOptions = toRequestOptions(options);
+    let offset = startOffset;
+
+    while (true) {
+      if (options?.signal?.aborted) {
+        throw toAbortError(options.signal, 'Pagination aborted');
+      }
+
+      const page = await fetchPage({ limit: pageSize, offset }, requestOptions);
+      offset += page.items.length;
+      yield page.items;
+
+      if (isLastPage(page, offset, pageSize)) return;
+    }
+  }
+}
+
+function isLastPage<U>(page: BsaleListResponse<U>, nextOffset: number, pageSize: number): boolean {
+  // Una página vacía nunca avanza el offset: seguir sería un loop infinito.
+  if (page.items.length === 0) return true;
+  if (typeof page.count === 'number') return nextOffset >= page.count;
+  return !page.next || page.items.length < pageSize;
+}
+
+function toRequestOptions(options: PageRequestOptions | undefined): HttpRequestOptions | undefined {
+  if (!options?.signal && !options?.skipCache && !options?.priority) return undefined;
+  return { signal: options.signal, skipCache: options.skipCache, priority: options.priority };
 }

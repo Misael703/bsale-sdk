@@ -4,12 +4,18 @@ import type {
   BsaleVariantPayload,
   BsaleVariantAttributeValue,
   BsaleVariantCosts,
+  BsaleVariantExpansions,
   BsaleListResponse,
   BsaleQueryParams,
 } from '../types';
 
-/** Variantes de productos. */
-export class VariantsResource extends BaseResource<BsaleVariant> {
+/**
+ * Variantes de productos.
+ *
+ * `expand: 'product'` está tipado: `list`, `listAll`, `iterate` y `getById`
+ * devuelven `BsaleVariantWithProduct` (producto embebido completo).
+ */
+export class VariantsResource extends BaseResource<BsaleVariant, BsaleVariantExpansions> {
   protected readonly path = 'variants';
 
   /** Crea una variante. Requiere que el producto padre exista. */

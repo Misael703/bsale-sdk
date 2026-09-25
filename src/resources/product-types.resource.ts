@@ -18,8 +18,14 @@ export class ProductTypesResource extends BaseResource<BsaleProductType> {
    * @param params - Optional query parameters
    * @returns Paginated list of products
    */
-  async getProducts(productTypeId: number, params?: BsaleQueryParams): Promise<BsaleListResponse<BsaleProduct>> {
-    return this.http.get<BsaleListResponse<BsaleProduct>>(`/product_types/${productTypeId}/products.json`, params);
+  async getProducts(
+    productTypeId: number | string,
+    params?: BsaleQueryParams,
+  ): Promise<BsaleListResponse<BsaleProduct>> {
+    return this.http.get<BsaleListResponse<BsaleProduct>>(
+      `/product_types/${productTypeId}/products.json`,
+      params,
+    );
   }
 
   /**
@@ -28,13 +34,19 @@ export class ProductTypesResource extends BaseResource<BsaleProductType> {
    * @param params - Optional query parameters
    * @returns Paginated list of attributes
    */
-  async getAttributes(productTypeId: number, params?: BsaleQueryParams): Promise<BsaleListResponse<BsaleProductTypeAttribute>> {
-    return this.http.get<BsaleListResponse<BsaleProductTypeAttribute>>(`/product_types/${productTypeId}/attributes.json`, params);
+  async getAttributes(
+    productTypeId: number | string,
+    params?: BsaleQueryParams,
+  ): Promise<BsaleListResponse<BsaleProductTypeAttribute>> {
+    return this.http.get<BsaleListResponse<BsaleProductTypeAttribute>>(
+      `/product_types/${productTypeId}/attributes.json`,
+      params,
+    );
   }
 
   /** Atributo individual de un tipo de producto. */
   async getAttributeById(
-    productTypeId: number,
+    productTypeId: number | string,
     attributeId: number,
   ): Promise<BsaleProductTypeAttribute> {
     return this.http.get<BsaleProductTypeAttribute>(

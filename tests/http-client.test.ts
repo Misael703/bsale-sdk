@@ -249,6 +249,34 @@ describe('HttpClient', () => {
       }
     });
 
+    it('el BsaleApiError(429) final expone el Retry-After real del servidor', async () => {
+      const noRetryClient = new HttpClient({
+        accessToken: 'tk',
+        baseUrl: 'https://api.bsale.io/v1',
+        maxRetries: 0,
+        cacheTtlMs: 0,
+      });
+      mockFetch.mockResolvedValueOnce(
+        new Response('{"error":"rl"}', { status: 429, headers: { 'Retry-After': '120' } }),
+      );
+
+      const err = await noRetryClient.get('/products.json').catch((e: unknown) => e);
+
+      expect(err).toBeInstanceOf(BsaleApiError);
+      expect((err as BsaleApiError).headers['retry-after']).toBe('120');
+      expect((err as BsaleApiError).retryAfterMs).toBe(120_000);
+    });
+
+    it('los errores 4xx exponen los headers de la respuesta', async () => {
+      mockFetch.mockResolvedValueOnce(
+        new Response('{"error":"nope"}', { status: 404, headers: { 'X-Request-Id': 'req-1' } }),
+      );
+
+      const err = await client.get('/products/9.json').catch((e: unknown) => e);
+
+      expect((err as BsaleApiError).headers['x-request-id']).toBe('req-1');
+    });
+
     it('should throw BsaleApiError(429) when retries are exhausted', async () => {
       const limitedClient = new HttpClient({
         accessToken: 'tk',

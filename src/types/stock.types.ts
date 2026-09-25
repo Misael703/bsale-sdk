@@ -4,12 +4,14 @@ export interface BsaleStock {
   readonly quantity: number;
   readonly quantityReserved: number;
   readonly quantityAvailable: number;
+  /** Sin `expand` el `id` llega como **string** (verificado en vivo 2026-09). */
   readonly variant?: {
-    readonly id: number;
+    readonly id: string;
     readonly href: string;
   };
+  /** Sin `expand` el `id` llega como **string** (verificado en vivo 2026-09). */
   readonly office?: {
-    readonly id: number;
+    readonly id: string;
     readonly href: string;
   };
   readonly href: string;

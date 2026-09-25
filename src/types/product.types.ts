@@ -1,7 +1,11 @@
 /** Producto del catálogo. */
 export interface BsaleProduct {
   readonly id: number;
-  readonly name: string;
+  /**
+   * Nombre del producto. Puede llegar `null` con el texto en `description`
+   * (`{ "name": null, "description": "Tarifa de plataforma" }`, verificado en vivo 2026-09).
+   */
+  readonly name: string | null;
   readonly description?: string;
   /** 0 = producto, 1 = servicio, 3 = pack/promoción */
   readonly classification: 0 | 1 | 3;
@@ -15,7 +19,8 @@ export interface BsaleProduct {
   readonly prestashopProductId?: number;
   /** **Sic**: typo histórico en API (`presashop` sin "t"). Respetar. */
   readonly presashopAttributeId?: number;
-  readonly product_type?: { readonly id: number; readonly href: string };
+  /** Sin `expand` el `id` llega como **string** (`{ "id": "2929" }`, verificado en vivo 2026-09). */
+  readonly product_type?: { readonly id: string; readonly href: string };
   readonly product_taxes?: { readonly href: string };
   readonly variants?: { readonly href: string };
   readonly href: string;

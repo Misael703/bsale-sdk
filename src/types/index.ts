@@ -1,8 +1,13 @@
-export type { BsaleConfig, BsaleHosts } from './config.types';
+export type { BsaleConfig, BsaleHosts, BsaleRateLimiterOptions } from './config.types';
 export type {
   BsaleListResponse,
   BsaleQueryParams,
+  BsaleQueryValue,
   BsalePaginateOptions,
+  BsaleRequestPriority,
+  BsaleExpandKeys,
+  BsaleExpanded,
+  BsaleNoExpansions,
 } from './common.types';
 export type { BsaleMiddleware, BsaleRequestContext } from './middleware.types';
 export type {
@@ -21,6 +26,8 @@ export type {
   BsaleVariantAttributeValue,
   BsaleVariantAttributeValueInput,
   BsaleVariantCosts,
+  BsaleVariantExpansions,
+  BsaleVariantWithProduct,
 } from './variant.types';
 export type {
   BsaleDocument,
@@ -76,14 +83,8 @@ export type {
   BsaleShippingClient,
   BsaleCreateShippingPayload,
 } from './shipping.types';
-export type {
-  BsalePaymentType,
-  BsaleCreatePaymentTypePayload,
-} from './payment-type.types';
-export type {
-  BsaleDynamicAttribute,
-  BsaleDynamicAttributeDetail,
-} from './dynamic-attribute.types';
+export type { BsalePaymentType, BsaleCreatePaymentTypePayload } from './payment-type.types';
+export type { BsaleDynamicAttribute, BsaleDynamicAttributeDetail } from './dynamic-attribute.types';
 export type { BsaleBookType } from './book-type.types';
 export type { BsaleDteCode } from './dte-code.types';
 export type { BsaleTax } from './tax.types';

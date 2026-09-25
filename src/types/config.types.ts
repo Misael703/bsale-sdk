@@ -1,3 +1,13 @@
+import type { BsaleRateLimiter } from '../client/rate-limiter';
+
+/** Configuración del token bucket compartido (ver `BsaleConfig.rateLimit`). */
+export interface BsaleRateLimiterOptions {
+  /** Tokens repuestos por segundo (default: 8, el límite documentado por Bsale). */
+  readonly requestsPerSecond?: number;
+  /** Capacidad del bucket: requests que pueden salir en ráfaga (default: `requestsPerSecond`). */
+  readonly burst?: number;
+}
+
 /**
  * Optional override for each Bsale API host. Defaults are documented at:
  * https://docs.bsale.dev (only Chile is supported by this SDK).
@@ -53,4 +63,12 @@ export interface BsaleConfig {
    * Útil para tracing, métricas, transformación de headers o respuestas.
    */
   readonly middlewares?: ReadonlyArray<import('./middleware.types').BsaleMiddleware>;
+  /**
+   * Limitador de velocidad del cliente (token bucket con carriles `high`/`low`).
+   * Activo por defecto a 8 req/s, compartido por los 5 hosts del cliente.
+   * - `undefined` u opciones → un bucket nuevo para este cliente.
+   * - una instancia de `BsaleRateLimiter` → compartirla entre varios clientes.
+   * - `false` → sin limitador (solo se reacciona al 429).
+   */
+  readonly rateLimit?: false | BsaleRateLimiterOptions | BsaleRateLimiter;
 }
