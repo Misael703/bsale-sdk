@@ -38,11 +38,13 @@ bsale-sdk/
 │   └── index.ts                    # Re-exports públicos
 ├── tests/                          # *.test.ts (vitest) y *.test-d.ts (tests de tipos)
 ├── examples/playground.ts          # `pnpm playground`
-├── .github/workflows/publish.yml   # Publica a npm en cada GitHub Release
+├── .github/workflows/
+│   ├── ci.yml                      # lint, typecheck, tests y build en cada PR (Node 20 y 22)
+│   └── publish.yml                 # Publica a npm en cada GitHub Release
 ├── CHANGELOG.md                    # Historial de versiones y notas de migración
 ├── eslint.config.js
 ├── tsup.config.ts
-├── tsconfig.json                   # tsconfig.test.json lo extiende para los tests de tipos
+├── tsconfig.json                   # build; tsconfig.test.json lo extiende con tests/ y examples/ (typecheck y tests de tipos)
 └── vitest.config.ts
 ```
 
@@ -147,7 +149,8 @@ pnpm dev              # Build en watch mode
 pnpm build            # Build de producción (CJS + ESM + types)
 pnpm test             # Correr tests
 pnpm test:watch       # Tests en watch mode
-pnpm lint             # ESLint (solo src/)
+pnpm lint             # ESLint (src/ y tests/)
+pnpm typecheck        # tsc sobre src/, tests/ y examples/
 pnpm format           # Formatear código
 pnpm playground       # Correr examples/playground.ts
 ```

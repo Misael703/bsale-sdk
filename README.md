@@ -947,7 +947,7 @@ El ahorro se concentra en docs ≤ 25 líneas (la mayoría del volumen típico).
 ```typescript
 const { document, details } = await bsale.documents.getWithDetails(824738, {
   expand: ['user', 'client'],
-  signal: ac.signal,
+  signal,
   skipCache: true,
 });
 // document.user, document.client vienen poblados sin requests extra
@@ -967,7 +967,8 @@ pnpm dev          # Build en watch mode (tsup)
 pnpm build        # Producción: CJS + ESM + .d.ts
 pnpm test         # vitest run
 pnpm test:watch   # vitest en watch
-pnpm lint         # ESLint sobre src/
+pnpm lint         # ESLint sobre src/ y tests/
+pnpm typecheck    # tsc sobre src/, tests/ y examples/
 pnpm format       # Prettier
 ```
 
