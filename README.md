@@ -453,7 +453,7 @@ const rate = await bsale.currencies.getExchangeRate(2, 1700000000);
 ```typescript
 const lists = await bsale.priceLists.list();
 const details = await bsale.priceLists.getDetails(1);
-await bsale.priceLists.updateDetail(1, 100, { variantValue: 5000, id: 100 });
+await bsale.priceLists.updateDetail(1, 100, { variantValue: 5000 });
 ```
 
 ### Usuarios (vendedores)
@@ -789,7 +789,7 @@ Todas las respuestas no-OK lanzan `BsaleApiError` con el body parseado:
 import { BsaleApiError } from '@misael703/bsale-sdk';
 
 try {
-  await bsale.documents.create({ /* ... */ });
+  await bsale.documents.create(documentPayload);
 } catch (err) {
   if (err instanceof BsaleApiError) {
     console.log(err.status);       // 400, 404, 429, 500...
@@ -801,10 +801,10 @@ try {
     console.log(err.headers);       // headers de la respuesta, nombres en minúscula
     console.log(err.retryAfterMs);  // Retry-After en ms, sin recortar (o undefined)
 
-    if (err.isRateLimit) /* 429 */;
-    if (err.isNotFound) /* 404 */;
-    if (err.isClientError) /* 4xx ≠ 429 */;
-    if (err.isServerError) /* 5xx */;
+    if (err.isRateLimit) { /* 429 */ }
+    if (err.isNotFound) { /* 404 */ }
+    if (err.isClientError) { /* 4xx ≠ 429 */ }
+    if (err.isServerError) { /* 5xx */ }
   }
 }
 ```
@@ -952,7 +952,7 @@ El ahorro se concentra en docs ≤ 25 líneas (la mayoría del volumen típico).
 ```typescript
 const { document, details } = await bsale.documents.getWithDetails(824738, {
   expand: ['user', 'client'],
-  signal: ac.signal,
+  signal,
   skipCache: true,
 });
 // document.user, document.client vienen poblados sin requests extra
