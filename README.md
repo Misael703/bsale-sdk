@@ -967,7 +967,8 @@ pnpm dev          # Build en watch mode (tsup)
 pnpm build        # Producción: CJS + ESM + .d.ts
 pnpm test         # vitest run
 pnpm test:watch   # vitest en watch
-pnpm lint         # ESLint sobre src/
+pnpm lint         # ESLint sobre src/ y tests/
+pnpm typecheck    # tsc sobre src/, tests/ y examples/
 pnpm format       # Prettier
 ```
 
