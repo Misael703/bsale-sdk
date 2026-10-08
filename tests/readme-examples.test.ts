@@ -23,7 +23,8 @@ declare const bsale: import('${PACKAGE_NAME}').BsaleClient;
 declare const accessToken: string;
 declare const signal: AbortSignal;
 declare const productId: number;
-declare const documentPayload: import('${PACKAGE_NAME}').BsaleDocumentCreatePayload;
+declare const orderId: string;
+declare const payload: import('${PACKAGE_NAME}').BsaleDocumentCreatePayload;
 declare const app: {
   post(
     path: string,

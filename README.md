@@ -2,11 +2,11 @@
 
 SDK en TypeScript para la API REST de [Bsale](https://www.bsale.cl) — versión Chile.
 
-- **35 recursos** cubriendo el 100% de la documentación oficial.
+- **35 recursos** de la documentación oficial (ver [Alcance](#alcance)).
 - **Zero dependencies** en runtime — solo `fetch` nativo de Node 20+.
 - **5 hosts** y **3 versiones** (v1/v2/v3) manejados internamente.
 - **Cache LRU + request coalescing** automáticos; TTL por recurso configurable.
-- **`AbortSignal`**, idempotency keys, async iterators y middleware Koa-style.
+- **`AbortSignal`**, async iterators y middleware Koa-style.
 - Retry con backoff exponencial, parser robusto de `Retry-After` (incluye HTTP-date).
 - **Limitador de velocidad** (token bucket de 8 req/s) con carriles `high`/`low`, compartible entre clientes.
 - Paginación que termina por `count`, no por página corta.
@@ -14,7 +14,13 @@ SDK en TypeScript para la API REST de [Bsale](https://www.bsale.cl) — versión
 - `BsaleApiError` enriquecido — parsea `code`, `details` y `message` del body.
 - Webhooks con tipos discriminados por `topic`.
 
-> Solo Chile (`api.bsale.io`). Perú y México fuera del alcance del SDK.
+Cambios por versión y notas de migración: [CHANGELOG.md](./CHANGELOG.md).
+
+## Alcance
+
+Solo Chile (`api.bsale.io`), y dentro de Bsale, el **núcleo del tenant**: productos, inventario, documentos tributarios, clientes, despachos, pagos y catálogos de configuración.
+
+Los recursos de tienda en línea (`carts`, `checkouts`, `webDescriptions`, `collections`, `variantShipping`, `coupons`, `discounts`), la integración con couriers (`courierOrders`) y la pasarela de pagos (`paymentsGateway`) siguen disponibles, pero **se eliminarán en la 1.0.0**. No construyas código nuevo sobre ellos.
 
 ---
 
@@ -54,6 +60,8 @@ const all = await bsale.products.listAll({ state: 0 });
 ## Configuración
 
 ```typescript
+import { BsaleClient } from '@misael703/bsale-sdk';
+
 const bsale = new BsaleClient({
   // Requerido — token de la API Bsale.
   accessToken: process.env.BSALE_TOKEN!,
@@ -71,6 +79,7 @@ const bsale = new BsaleClient({
   timeout: 15000,
 
   // Opcional — reintentos para 5xx y errores de red. Default 3.
+  // Aplica también a POST/PUT/DELETE: ver "Emitir sin duplicados".
   maxRetries: 3,
 
   // Opcional — TTL del cache en memoria (ms). Default 60000.
@@ -104,8 +113,8 @@ const bsale = new BsaleClient({
 | `api.bsale.io` | API principal — todos los recursos comerciales |
 | `bsp-api.bsale.io` | Aceptación/reclamo de DTE de terceros |
 | `credential.bsale.io` | Metadata de instancia |
-| `courier.bsale.io` | Integración con couriers (e-commerce) |
-| `bcash.bsale.io` | Pasarela de pagos (lado MPE) |
+| `courier.bsale.io` | Integración con couriers (e-commerce). Se elimina en la 1.0.0 |
+| `bcash.bsale.io` | Pasarela de pagos (lado MPE). Se elimina en la 1.0.0 |
 
 El SDK pasa automáticamente cada recurso al host correcto. Solo hay que configurar `hosts` si necesitas apuntar a sandbox o proxy.
 
@@ -154,6 +163,8 @@ El SDK pasa automáticamente cada recurso al host correcto. Solo hay que configu
 
 ### E-commerce / tienda en línea
 
+> Se eliminan en la 1.0.0 (ver [Alcance](#alcance)).
+
 | Recurso | Acceso | Descripción |
 |---|---|---|
 | `carts` | CRUD parcial | Carros de compra |
@@ -170,8 +181,8 @@ El SDK pasa automáticamente cada recurso al host correcto. Solo hay que configu
 |---|---|---|
 | `instances` | `credential.bsale.io` | Metadata de la empresa (token en path) |
 | `thirdPartyDocuments` | `api` + `bsp-api` | Compras + claims SII |
-| `courierOrders` | `courier.bsale.io` | Integración con couriers |
-| `paymentsGateway` | `bcash.bsale.io` | Pasarela (lado MPE — uso atípico) |
+| `courierOrders` | `courier.bsale.io` | Integración con couriers. Se elimina en la 1.0.0 |
+| `paymentsGateway` | `bcash.bsale.io` | Pasarela (lado MPE). Se elimina en la 1.0.0 |
 
 ### Métodos heredados
 
@@ -471,6 +482,8 @@ const sales = await bsale.users.getSales(2, {
 
 ### E-commerce
 
+> Se eliminan en la 1.0.0 (ver [Alcance](#alcance)).
+
 ```typescript
 // Cupones
 await bsale.coupons.create({
@@ -566,7 +579,7 @@ const status = await bsale.thirdPartyDocuments.getClaimStatus({
   trackingNumber: claim.data.trackingNumber,
 });
 
-// Couriers e-commerce (host: courier.bsale.io)
+// Couriers e-commerce (host: courier.bsale.io). Se elimina en la 1.0.0.
 const order = await bsale.courierOrders.getById(17170);
 await bsale.courierOrders.setLabel(17170, {
   trackingNumber: 'TRK123',
@@ -579,7 +592,7 @@ await bsale.courierOrders.submitLog({
   stateId: 2, // 2=despachado, 3=entregado, 4=por despachar/error
 });
 
-// Pasarela de pagos (host: bcash.bsale.io) — solo para Medios de Pago Externos.
+// Pasarela de pagos (host: bcash.bsale.io), solo para Medios de Pago Externos. Se elimina en la 1.0.0.
 await bsale.paymentsGateway.reportSuccess('py-token', {
   id: 'tx-123',
   authorizationCode: '4321',
@@ -696,6 +709,8 @@ const reader = new BsaleClient({ accessToken, rateLimit: limiter });
 const emitter = new BsaleClient({ accessToken, maxRetries: 0, timeout: 45_000, rateLimit: limiter });
 ```
 
+Lo que se comparte es solo el presupuesto de requests: **cada cliente mantiene su propia caché**. Una escritura del `emitter` no invalida lo que el `reader` tiene cacheado, así que lee con `skipCache: true` lo que acabas de modificar.
+
 `rateLimit: false` desactiva el limitador (queda solo la reacción al 429 con `Retry-After`).
 
 ---
@@ -721,24 +736,24 @@ Soporta `maxItems`, `pageSize`, `signal`, `skipCache` y `priority`.
 
 ---
 
-## Idempotency keys
+## Emitir sin duplicados
 
-POST/PUT pueden enviar `Idempotency-Key`, preservado en cada retry interno. Protege contra duplicados de red cuando Bsale soporte el header (recomendado para emisión de documentos):
+Con `maxRetries` mayor que 0 (default 3), el SDK también reintenta POST, PUT y DELETE ante un 5xx, un error de red o un timeout. Si el primer intento sí llegó a Bsale, el reintento puede crear un segundo registro.
+
+Para documentos, la protección la da la API: el campo **`salesId`** (tu id externo, hasta 255 caracteres). Si ya existe un documento del mismo tipo con ese `salesId`, Bsale devuelve el existente con HTTP 200 en vez de emitir otro, así que un reintento, del SDK o tuyo, no duplica la boleta:
 
 ```typescript
-import { randomUUID } from 'node:crypto';
-
-const opKey = randomUUID();
-
-const doc = await bsale.documents.create(
-  { /* payload */ },
-  { idempotencyKey: opKey },
-);
+const doc = await bsale.documents.create({
+  documentTypeId: 1,
+  officeId: 1,
+  emissionDate: 1705276800,
+  expirationDate: 1705276800,
+  salesId: `pedido-${orderId}`, // estable por operación, no aleatorio por intento
+  details: [{ variantId: 123, netUnitValue: 1000, quantity: 1, taxId: '[1]' }],
+});
 ```
 
-Si la red corta entre el request y la respuesta, el SDK reintenta con la **misma** key, y el server devuelve la misma boleta en lugar de emitir una segunda.
-
-> Nota: actualmente sólo se aplica si pasas `requestOptions` directamente a `http.post/put`. Las firmas de los métodos custom de los recursos (`documents.create`, etc.) no la exponen aún — se llega vía `client.documents.http.post(path, body, { idempotencyKey })` o, próximamente, como tercer argumento del helper.
+`shippings.create` no tiene equivalente: la API no deduplica guías de despacho. Emítelas con un cliente `maxRetries: 0` y, ante un timeout o un 5xx, consulta si la guía se creó antes de volver a intentarlo.
 
 ---
 
@@ -789,7 +804,7 @@ Todas las respuestas no-OK lanzan `BsaleApiError` con el body parseado:
 import { BsaleApiError } from '@misael703/bsale-sdk';
 
 try {
-  await bsale.documents.create(documentPayload);
+  await bsale.documents.create(payload);
 } catch (err) {
   if (err instanceof BsaleApiError) {
     console.log(err.status);       // 400, 404, 429, 500...
@@ -863,7 +878,7 @@ const str = formatBsaleDate(1388545200);        // → "01-01-2014"
 const today = todayBsaleTimestamp();            // hoy 00:00 en segundos
 ```
 
-> **Excepciones**: `discounts` usa `'DD/MM/YYYY'` (string), `paymentsGateway` usa ISO 8601. Ver matriz de anomalías en [Resources/bsale-api](file:///Users/misa/vault/brain/Resources/bsale-api).
+> **Excepciones**: `discounts` usa `'DD/MM/YYYY'` (string) y `paymentsGateway` usa ISO 8601.
 
 ---
 
@@ -881,7 +896,7 @@ El SDK respeta literalmente las quirks de la API:
 - Endpoint plano: `clients.adjustPoints()` usa `/clients/points.json` (no `/clients/{id}/points`).
 - Tipos mixtos en responses: `payment.amount`, `payment.recordDate`, `tax.percentage` (vienen como `string` o `number` según endpoint).
 - `coupons.disabled` (no `state`).
-- `shippingTypes.codeSii` es `int`, mientras `documentTypes.codeSii` es `string`.
+- `shippingTypes.codeSii`: la doc lo declara `string` en la tabla de campos e `int` en el JSON de ejemplo. El SDK lo tipa `string`, igual que `documentTypes.codeSii`.
 - **Paginación profunda con `expand` truncada a 25 items** — limitación silenciosa de la API. Ver sección dedicada abajo.
 
 ---
@@ -892,37 +907,17 @@ La API de Bsale **no pagina los sub-recursos expandidos junto con el padre**. Cu
 
 Si el sub-recurso supera 25 items, **vienen truncados silenciosamente**. No hay error, no hay warning, y no existe sintaxis para sobreescribir el límite (no soporta `expand=details(limit:50)` ni equivalente).
 
-### Detección
-
-Como el sub-recurso embebido tiene la misma forma que `BsaleListResponse<T>`, puedes detectar la truncación comparando `count` vs `items.length`:
-
-```typescript
-const page = await bsale.documents.list({ limit: 50, expand: 'details' });
-
-for (const doc of page.items) {
-  const sub = (doc as any).details;
-  if (sub?.count > sub?.items.length) {
-    // Hay más detalles que los retornados — fetch dedicado al endpoint del sub-recurso
-    const fullDetails = await bsale.documents.getDetails(doc.id, { limit: 50 });
-  }
-}
-```
-
 ### Recomendación
 
 - Usa `expand` sólo cuando **garantices** que el sub-recurso cabe en el límite implícito (relaciones 1:1 como `client` o `office` en un documento).
-- Para sub-recursos potencialmente grandes (`details`, `references`, `document_taxes`, `sellers`, `attributes`), haz un segundo fetch explícito al endpoint dedicado (`/documents/{id}/details.json`, etc.) y pagínalo normalmente (máx. 50 por página).
-- Asume que `expand` miente cuando trabajes con documentos B2B / mayoristas o cualquier dataset donde la cardinalidad del sub-recurso pueda crecer.
-
-### Por qué importa para ELT / data warehouse
-
-Si tu fact table tiene grano de línea de documento (una fila por `document_detail`), depender de `expand=details` introduce un sesgo **no aleatorio**: afecta más a los documentos grandes, que suelen ser los analíticamente más relevantes. Para pipelines de extracción, usa siempre el endpoint dedicado del sub-recurso y acepta el costo N+1 a cambio de completitud.
+- Para las líneas de documentos, despachos y devoluciones usa `getWithDetails` (ver abajo): detecta el truncado y pagina el resto por ti.
+- Para otros sub-recursos potencialmente grandes (`references`, `document_taxes`, `sellers`, `attributes`), haz un fetch explícito al endpoint dedicado (`bsale.documents.getReferences(id)`, etc.) y pagínalo normalmente (máx. 50 por página).
 
 ---
 
 ## Documento + detalles en un paso — `getWithDetails()`
 
-`DocumentsResource.getWithDetails(id)` resuelve el patrón "consultar un documento y luego sus líneas" minimizando requests. Internamente:
+`documents.getWithDetails(id)` resuelve el patrón "consultar un documento y luego sus líneas" minimizando requests. Internamente:
 
 1. Hace **un solo request** con `expand=details` — trae el documento y los primeros 25 detalles embebidos en la misma respuesta.
 2. Si `count <= 25`, retorna directo. **No dispara un segundo request.**
@@ -960,122 +955,7 @@ const { document, details } = await bsale.documents.getWithDetails(824738, {
 
 `signal` y `skipCache` se propagan a todas las llamadas internas.
 
-### Helper genérico debajo — `paginateSubresource()`
-
-`getWithDetails` usa `BaseResource.paginateSubresource<U>()` por debajo. Es un método `protected` reutilizable para paginar cualquier sub-recurso (incluyendo casos donde tienes la primera página ya embebida del `expand`). Se irá exponiendo en próximas versiones a través de helpers tipo `getAllReferences`, `getAllTaxes`, etc.
-
----
-
-## Migración v0.7.0 → v0.8.0
-
-**Breaking changes de tipos** (sin cambios de API en runtime). Los tipos ahora reflejan lo que la API entrega, verificado en vivo en 2026-09, aunque la doc diga otra cosa:
-
-| Tipo | Campo | Antes | Ahora |
-|---|---|---|---|
-| `BsaleVariant` | `product.id` | `number` | `string` |
-| `BsaleProduct` | `product_type.id` | `number` | `string` |
-| `BsaleProduct` | `name` | `string` | `string \| null` |
-| `BsaleStock` | `variant.id` | `number` | `string` |
-| `BsaleStock` | `office.id` | `number` | `string` |
-| `BsalePriceList` | `id` | `number` | `string` |
-| `BsaleVariantCosts` | `averageCost` | `string` | `number` |
-| `BsaleQueryParams` | filtros dinámicos | `any` | `BsaleQueryValue` (`string \| number \| boolean \| null \| undefined`) |
-
-Los métodos que reciben esos ids (`getById`, `products.getVariants`, `priceLists.getDetails`/`getDetailById`/`updateDetail`, `stocks.getByVariantAndOffice`, `productTypes.getProducts`/`getAttributes`/`getAttributeById`) ahora aceptan `number | string`, así que puedes pasar el id tal como llega. Si comparabas o sumabas esos ids como números, conviértelos con `Number(id)`.
-
-**Cambios de comportamiento:**
-
-- **Limitador de velocidad activo por defecto** (8 req/s por cliente). Nunca rechaza una request: solo demora las que excederían el límite documentado, que Bsale respondería con 429. Para volver al comportamiento anterior: `rateLimit: false`.
-- **`listAll`/`iterate` terminan por `count`**. Antes, una página corta que no era la última cortaba el recorrido en silencio. Si dependías de ese corte, usa `maxItems`.
-
-**Nuevo (additive):** `BsaleRateLimiter` y la opción `priority`; `expand` tipado en `variants` (`BsaleVariantWithProduct`); `products.getVariants(id, params, requestOptions)`; `BsaleApiError.headers` y `retryAfterMs`; `BsaleVariant.isLot`; `BsaleVariantCosts.totalCost`.
-
----
-
-## Migración v0.4.0 → v0.5.0
-
-**Sin breaking changes**. Features additive:
-
-- `ShippingsResource.listByDocument(documentId)` — método nuevo. Lista las guías de despacho asociadas a un documento (boleta/factura) original, encapsulando el filtro `documentid` de la API.
-- `ReturnsResource.listByReferenceDocument(documentId)` — método nuevo. Lista las devoluciones (NC) que referencian a un documento original, encapsulando el filtro `referencedocumentid` de la API.
-
-Ambos son wrappers tipados sobre `list()`; si ya pasabas esos filtros a mano vía `list({ documentid })` / `list({ referencedocumentid })`, sigue funcionando idéntico.
-
----
-
-## Migración v0.3.0 → v0.4.0
-
-**Sin breaking changes**. Features additive:
-
-- `DocumentsResource.getWithDetails(id, options?)` — método nuevo. Encapsula el patrón "documento + todas las líneas" con optimización de requests vía `expand=details` embebido. Acepta `expand`, `signal`, `skipCache`.
-- `BaseResource.paginateSubresource()` — helper `protected` para paginar sub-recursos arbitrarios. Acepta una primera página ya fetcheada (`embedded`) para evitar requests redundantes. Pensado para los `getAll*` que vienen en próximas versiones.
-
-Si dependes del shape exacto del response de `getById(id, { expand: 'details' })` y lo estabas casteando para acceder a `details.items`, sigue funcionando — el nuevo helper no cambia el comportamiento del HTTP client. El método existente sigue intacto.
-
----
-
-## Migración v0.2.0 → v0.3.0
-
-**Sin breaking changes**. Todas las features nuevas son additive y opt-in:
-
-- `cacheMaxEntries` (LRU) — default 1000, sólo importa si tu proceso de larga vida tenía leak silente.
-- `cacheTtlByResource` — opcional; si no lo seteás, sigue usando `cacheTtlMs`.
-- Request coalescing — automático y transparente. Si tu código asumía que cada GET hacía una fetch real (poco probable), ahora múltiples GETs idénticos en paralelo comparten una sola request.
-- `AbortSignal`, `skipCache`, `idempotencyKey` — opt-in via `HttpRequestOptions`.
-- `BaseResource.iterate()` — método nuevo, los existentes (`list`, `listAll`, `getById`, `count`) intactos.
-- Middleware — opt-in via `middlewares` config o `client.use()`.
-- `BsaleApiError` — campos `code` / `details` / `isClientError` agregados; los existentes (`status`, `path`, `responseBody`, `isRateLimit`, `isServerError`, `isNotFound`) intactos. El `message` ahora puede incluir el detalle del backend (ej. `"Bsale API error: 400 — Cliente no encontrado"`); si tu código matcheaba el `message` exacto, revisá.
-
-### Bug fixes incluidos
-
-- 429 con retries agotados ahora lanza `BsaleApiError(429)` (antes `Error` genérico).
-- `Retry-After` malformado ya no causa loops agresivos (antes `parseInt` daba `NaN` y `setTimeout(NaN)` reintentaba inmediato). Soporta HTTP-date y aplica cap de 60s.
-- POST a `/v2/products/pack.json` ya no borra todo el cache (antes la regex de invalidación capturaba `"v"` y matcheaba todas las URLs con `v1`).
-- POST a sub-recurso (ej. `/products/123/variants.json`) invalida tanto `products` como `variants` (antes sólo `products`).
-- Cache devuelve clones (`structuredClone`) — mutar el resultado ya no envenena lecturas siguientes.
-
----
-
-## Migración v0.1.0 → v0.2.0
-
-Si vienes de la versión anterior, atención a estos breaking changes:
-
-1. **`shippings.update()` eliminado** — la API oficial no expone PUT en despachos. Si necesitabas modificar un despacho, anúlalo (`delete`) y crea uno nuevo.
-2. **`returns.annul()` ahora requiere `returnId`** como primer argumento:
-   ```typescript
-   // antes:
-   await bsale.returns.annul({ documentTypeId, referenceDocumentId, ... });
-   // ahora:
-   await bsale.returns.annul(returnId, { documentTypeId, referenceDocumentId, ... });
-   ```
-3. **`BsaleShippingPayload` renombrado a `BsaleCreateShippingPayload`**.
-4. **`BsaleConfig.baseUrl` queda deprecated** — preferir `hosts.api`. Sigue funcionando para back-compat.
-5. **Tipos enriquecidos**: muchos campos antes opcionales ahora tienen dominios estrictos (`0 | 1`, `0 | 1 | 99`). Puede requerir ajustes si haces narrowing manual.
-6. **Soporte multi-país eliminado** — solo Chile. Si pasabas `baseUrl` apuntando a Perú/México, ya no funciona.
-
----
-
-## Crear un nuevo recurso
-
-1. Tipo en `src/types/{resource}.types.ts` y export desde `src/types/index.ts`.
-2. Resource en `src/resources/{resource}.resource.ts` extendiendo `BaseResource<T>`.
-3. Export desde `src/resources/index.ts`.
-4. Registrar en `BsaleClient` (constructor + propiedad pública).
-
-```typescript
-import { BaseResource } from './base.resource';
-import type { BsaleFoo } from '../types';
-
-export class FooResource extends BaseResource<BsaleFoo> {
-  protected readonly path = 'foo';
-
-  async customMethod(id: number) {
-    return this.http.get(`/foo/${id}/bar.json`);
-  }
-}
-```
-
-Para recursos en otros hosts (no `api.bsale.io`) o con auth en path, NO extender `BaseResource` — usar `HttpClient` directamente y pasar el cliente apropiado (`bspHttp`, `credentialHttp`, `courierHttp`, `bcashHttp`).
+`shippings.getWithDetails(id)` y `returns.getWithDetails(id)` siguen el mismo patrón; devuelven `{ shipping, details }` y `{ returnDoc, details }`.
 
 ---
 
@@ -1087,8 +967,11 @@ pnpm dev          # Build en watch mode (tsup)
 pnpm build        # Producción: CJS + ESM + .d.ts
 pnpm test         # vitest run
 pnpm test:watch   # vitest en watch
+pnpm lint         # ESLint sobre src/
 pnpm format       # Prettier
 ```
+
+Para contribuir (agregar un recurso, convenciones del repo), ver [AGENTS.md](./AGENTS.md).
 
 ---
 

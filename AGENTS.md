@@ -5,6 +5,7 @@
 SDK en TypeScript para la API REST de Bsale (Chile). Publicado en [npmjs](https://www.npmjs.com/package/@misael703/bsale-sdk) bajo el scope `@misael703`. C&oacute;digo fuente en GitHub: `Misael703/bsale-sdk`.
 
 > **Scope**: solo Chile (`api.bsale.io`). Per&uacute; y M&eacute;xico fueron descartados en 2026-04-29.
+> Dentro de Bsale, el alcance es el **n&uacute;cleo del tenant** (decisi&oacute;n 2026-10-08). Los 7 recursos de tienda en l&iacute;nea (`carts`, `checkouts`, `webDescriptions`, `collections`, `variantShipping`, `coupons`, `discounts`), `courierOrders` y `paymentsGateway` (con los hosts `courier` y `bcash`) se eliminan en la release de limpieza 1.0.0: no les agregues funcionalidad.
 
 ## Tech Stack
 
@@ -12,7 +13,7 @@ SDK en TypeScript para la API REST de Bsale (Chile). Publicado en [npmjs](https:
 - **Language**: TypeScript 5.x (strict mode)
 - **Build**: tsup (genera CJS + ESM + .d.ts)
 - **Package Manager**: pnpm
-- **Registry**: npmjs (`registry.npmjs.org`) — publicaci&oacute;n con `pnpm publish`
+- **Registry**: npmjs (`registry.npmjs.org`) — se publica al crear un GitHub Release (`.github/workflows/publish.yml`, `npm publish --provenance`), nunca a mano
 - **Testing**: vitest
 - **Linting**: eslint + prettier
 
@@ -22,71 +23,29 @@ SDK en TypeScript para la API REST de Bsale (Chile). Publicado en [npmjs](https:
 bsale-sdk/
 ├── src/
 │   ├── client/
-│   │   ├── http-client.ts          # Fetch wrapper: retry, cache, rate limit, timeout
+│   │   ├── http-client.ts          # Fetch wrapper: retry, cache LRU, coalescing, middleware, timeout
 │   │   ├── rate-limiter.ts         # BsaleRateLimiter: token bucket 8 req/s con carriles high/low
 │   │   └── bsale-client.ts         # Fachada pública (entry point principal)
-│   ├── resources/
-│   │   ├── base.resource.ts              # Clase abstracta: list, listAll, getById, count
-│   │   ├── products.resource.ts
-│   │   ├── variants.resource.ts
-│   │   ├── documents.resource.ts
-│   │   ├── clients.resource.ts
-│   │   ├── price-lists.resource.ts
-│   │   ├── stocks.resource.ts
-│   │   ├── document-types.resource.ts
-│   │   ├── offices.resource.ts
-│   │   ├── shippings.resource.ts
-│   │   ├── payment-types.resource.ts
-│   │   ├── stock-receptions.resource.ts
-│   │   ├── stock-consumptions.resource.ts
-│   │   ├── returns.resource.ts
-│   │   ├── third-party-documents.resource.ts
-│   │   ├── product-types.resource.ts
-│   │   ├── users.resource.ts
-│   │   ├── shipping-types.resource.ts
-│   │   └── index.ts
-│   ├── types/
-│   │   ├── config.types.ts               # BsaleConfig
-│   │   ├── common.types.ts               # BsaleListResponse, BsaleQueryParams
-│   │   ├── product.types.ts
-│   │   ├── variant.types.ts
-│   │   ├── document.types.ts
-│   │   ├── client.types.ts
-│   │   ├── price-list.types.ts
-│   │   ├── stock.types.ts
-│   │   ├── document-type.types.ts
-│   │   ├── office.types.ts
-│   │   ├── shipping.types.ts
-│   │   ├── payment-type.types.ts
-│   │   ├── stock-reception.types.ts
-│   │   ├── stock-consumption.types.ts
-│   │   ├── return.types.ts
-│   │   ├── third-party-document.types.ts
-│   │   ├── product-type.types.ts
-│   │   ├── user.types.ts
-│   │   ├── shipping-type.types.ts
-│   │   ├── webhook.types.ts
-│   │   └── index.ts
+│   ├── resources/                  # base.resource.ts + un {recurso}.resource.ts por recurso (35)
+│   ├── types/                      # un {recurso}.types.ts por recurso + config, common, middleware, webhook
 │   ├── utils/
-│   │   ├── date.utils.ts           # toBsaleTimestamp, fromBsaleTimestamp, formatBsaleDate
+│   │   ├── date.utils.ts           # toBsaleTimestamp, fromBsaleTimestamp, formatBsaleDate, todayBsaleTimestamp
 │   │   ├── abort.utils.ts          # toAbortError
+│   │   ├── lru-cache.ts            # LRU de la caché de respuestas
 │   │   └── retry-after.utils.ts    # parseRetryAfterMs (delta-seconds o HTTP-date)
 │   ├── errors/
 │   │   └── bsale.error.ts          # BsaleApiError con helpers (isRateLimit, isNotFound, etc.)
-│   └── index.ts                     # Re-exports públicos
-├── tests/
-│   ├── http-client.test.ts
-│   ├── base-resource.test.ts
-│   └── date-utils.test.ts
+│   └── index.ts                    # Re-exports públicos
+├── tests/                          # *.test.ts (vitest) y *.test-d.ts (tests de tipos)
+├── examples/playground.ts          # `pnpm playground`
+├── .github/workflows/
+│   ├── ci.yml                      # lint, typecheck, tests y build en cada PR (Node 20 y 22)
+│   └── publish.yml                 # Publica a npm en cada GitHub Release
+├── CHANGELOG.md                    # Historial de versiones y notas de migración
+├── eslint.config.js
 ├── tsup.config.ts
-├── tsconfig.json
-├── vitest.config.ts
-├── package.json
-├── .npmrc
-├── .gitignore
-├── .prettierrc
-├── .eslintrc.json
-└── README.md
+├── tsconfig.json                   # build; tsconfig.test.json lo extiende con tests/ y examples/ (typecheck y tests de tipos)
+└── vitest.config.ts
 ```
 
 ## Bsale API Reference
@@ -115,27 +74,9 @@ bsale-sdk/
 - Count: `/products/count.json`
 - Rate limit: responde 429 con header `Retry-After`
 
-### Recursos principales
+### Recursos
 
-| Recurso | Path | Métodos |
-|---------|------|---------|
-| Productos | `/products` | GET, POST, PUT |
-| Variantes | `/variants` | GET, POST, PUT |
-| Documentos | `/documents` | GET, POST |
-| Clientes | `/clients` | GET, POST, PUT |
-| Listas de precio | `/price_lists` | GET, PUT (solo detalles) |
-| Stock | `/stocks` | GET |
-| Tipos de documento | `/document_types` | GET |
-| Sucursales | `/offices` | GET |
-| Despachos | `/shippings` | GET, POST, PUT |
-| Formas de pago | `/payment_types` | GET |
-| Recepciones de stock | `/stocks/receptions` | GET, POST |
-| Consumos de stock | `/stocks/consumptions` | GET, POST |
-| Devoluciones | `/returns` | GET, POST |
-| Documentos de terceros | `/third_party_documents` | GET |
-| Tipos de producto | `/product_types` | GET, POST, PUT, DELETE |
-| Usuarios | `/users` | GET |
-| Tipos de despacho | `/shipping_types` | GET |
+El SDK expone 35 recursos; el inventario con sus m&eacute;todos est&aacute; en la secci&oacute;n "Recursos disponibles" del `README.md` y la fuente de verdad es `src/client/bsale-client.ts`. Los despachos (`/shippings`) solo tienen GET, POST y DELETE (anular): la API no expone PUT.
 
 ### Webhooks de Bsale
 
@@ -146,18 +87,18 @@ Bsale envía POST a una URL configurada con este payload:
   "cpnId": 2,
   "resource": "/v2/variants/7079.json",
   "resourceId": "7079",
-  "topic": "product|variant|document|price|stock",
+  "topic": "document|product|variant|price|stock|payment|courierOrder",
   "action": "post|put|delete",
   "send": 1503500856,
   "officeId": "1"  // solo en algunos topics
 }
 ```
 
-Topics: document, product, variant, price, stock.
+El SDK tipa 7 topics como uni&oacute;n discriminada (`src/types/webhook.types.ts`): `document`, `product`, `variant`, `price`, `stock`, `payment` y `courierOrder`.
 
 ## Architecture Decisions
 
-1. **Clase `HttpClient`**: Maneja fetch, retry con backoff exponencial, cache en memoria (Map con TTL), rate limit (429 → espera Retry-After), timeout con AbortController. NO usa axios ni dependencias externas.
+1. **Clase `HttpClient`**: Maneja fetch, retry con backoff exponencial, cache LRU en memoria con TTL, rate limit (429 → espera Retry-After), timeout con AbortController. NO usa axios ni dependencias externas.
 
 2. **Clase abstracta `BaseResource<T, X>`**: Provee `list()`, `listAll()`/`iterate()` (paginación automática que termina por `count`, nunca por página corta), `getById()`, `count()`. `X` es el mapa opcional de expansiones (relación → forma embebida) que tipa el resultado según el literal de `expand`. Cada resource concreto hereda y agrega métodos específicos.
 
@@ -167,11 +108,13 @@ Topics: document, product, variant, price, stock.
 
 5. **Rate limit**: `BsaleRateLimiter` (token bucket, 8 req/s documentado por Bsale) activo por defecto, uno por `BsaleClient` y compartido por sus 5 hosts. Carriles `high` (default) y `low` (syncs). Cada fetch real, incluido cada retry, consume un token; los hits de cache no.
 
-6. **Cache**: In-memory Map con TTL configurable. Se invalida automáticamente en operaciones de escritura (POST/PUT/DELETE). El método `handleWebhook()` invalida el cache del recurso afectado.
+6. **Cache**: LRU en memoria con TTL configurable, una por host y por `BsaleClient`. Se invalida automáticamente en operaciones de escritura (POST/PUT/DELETE). El método `handleWebhook()` invalida el cache del recurso afectado.
 
 ## Key Patterns
 
 ### Agregar un nuevo resource
+
+Solo recursos del n&uacute;cleo del tenant (ver Scope).
 
 1. Crear tipo en `src/types/{resource}.types.ts`
 2. Exportar desde `src/types/index.ts`
@@ -184,17 +127,19 @@ Topics: document, product, variant, price, stock.
 
 ```typescript
 import { BaseResource } from './base.resource';
-import { BsaleFoo } from '../types';
+import type { BsaleFoo, BsaleFooBar, BsaleListResponse } from '../types';
 
 export class FooResource extends BaseResource<BsaleFoo> {
   protected readonly path = 'foo'; // → /foo.json, /foo/{id}.json
 
   // Métodos custom si son necesarios
-  async customMethod(id: number) {
-    return this.http.get(`/foo/${id}/bar.json`);
+  async getBars(id: number): Promise<BsaleListResponse<BsaleFooBar>> {
+    return this.http.get<BsaleListResponse<BsaleFooBar>>(`/foo/${id}/bar.json`);
   }
 }
 ```
+
+Para endpoints en otro host (no `api.bsale.io`), el resource recibe el `HttpClient` de ese host desde el constructor de `BsaleClient` (ver `third-party-documents.resource.ts` con `bspHttp`). Si el token va en el path, no extiendas `BaseResource` y usa `skipAuth` (ver `instances.resource.ts`).
 
 ## Commands
 
@@ -204,10 +149,13 @@ pnpm dev              # Build en watch mode
 pnpm build            # Build de producción (CJS + ESM + types)
 pnpm test             # Correr tests
 pnpm test:watch       # Tests en watch mode
-pnpm lint             # Linting
+pnpm lint             # ESLint (src/ y tests/)
+pnpm typecheck        # tsc sobre src/, tests/ y examples/
 pnpm format           # Formatear código
-pnpm publish          # Publicar a npmjs
+pnpm playground       # Correr examples/playground.ts
 ```
+
+Publicar: subir `version` en `package.json` y `CHANGELOG.md`, mergear a `main` y crear el GitHub Release (`gh release create vX.Y.Z --generate-notes`); el workflow corre tests, build y `npm publish --provenance`.
 
 ## Code Style
 
@@ -219,7 +167,7 @@ pnpm publish          # Publicar a npmjs
 - Resources con sufijo `Resource`: `ProductsResource`
 - NO usar `any` (los filtros dinámicos de `BsaleQueryParams` usan `BsaleQueryValue`)
 - Comentarios JSDoc en métodos públicos
-- Errores siempre como `BsaleApiError` (no strings ni Error genéricos)
+- Respuestas HTTP no-OK siempre como `BsaleApiError`. Hoy los errores de transporte (red, timeout) y de validaci&oacute;n de argumentos salen como `Error`, `TypeError` o `RangeError`; no agregues lanzamientos gen&eacute;ricos nuevos
 
 ## Important Notes
 
