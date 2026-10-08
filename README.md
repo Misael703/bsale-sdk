@@ -14,6 +14,8 @@ SDK en TypeScript para la API REST de [Bsale](https://www.bsale.cl) — versión
 - `BsaleApiError` enriquecido — parsea `code`, `details` y `message` del body.
 - Webhooks con tipos discriminados por `topic`.
 
+Cambios por versión y notas de migración: [CHANGELOG.md](./CHANGELOG.md).
+
 ## Alcance
 
 Solo Chile (`api.bsale.io`), y dentro de Bsale, el **núcleo del tenant**: productos, inventario, documentos tributarios, clientes, despachos, pagos y catálogos de configuración.
@@ -954,12 +956,6 @@ const { document, details } = await bsale.documents.getWithDetails(824738, {
 `signal` y `skipCache` se propagan a todas las llamadas internas.
 
 `shippings.getWithDetails(id)` y `returns.getWithDetails(id)` siguen el mismo patrón; devuelven `{ shipping, details }` y `{ returnDoc, details }`.
-
----
-
-## Cambios entre versiones
-
-El historial de versiones y las notas de migración están en [CHANGELOG.md](./CHANGELOG.md).
 
 ---
 
