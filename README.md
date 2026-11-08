@@ -1,5 +1,13 @@
 # @misael703/bsale-sdk
 
+## Status
+
+This package is no longer maintained and was archived in November 2026.
+
+It was a zero-dependency TypeScript client for the Bsale REST API, built for the author's internal projects.
+
+Existing versions on npm keep working, and the package is marked as deprecated on npm. Fork it if you need it; the license is unchanged.
+
 SDK en TypeScript para la API REST de [Bsale](https://www.bsale.cl) — versión Chile.
 
 - **35 recursos** de la documentación oficial (ver [Alcance](#alcance)).
