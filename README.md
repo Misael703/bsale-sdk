@@ -4,7 +4,7 @@
 
 This package is no longer maintained and was archived in November 2026.
 
-It was a zero-dependency TypeScript client for the Bsale REST API, built for internal projects. Those projects now carry their own client, so there is no one left to maintain it for.
+It was a zero-dependency TypeScript client for the Bsale REST API, built for the author's internal projects.
 
 Existing versions on npm keep working, and the package is marked as deprecated on npm. Fork it if you need it; the license is unchanged.
 
